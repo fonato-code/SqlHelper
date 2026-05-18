@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SqlHelp — Editor de colunas (sp_help)</title>
+  <link href="src/css/bootsrtap-v5.3.8.css" rel="stylesheet">
+  <link href="src/fontawesome5pro/fontawesome-pro-5.8.2.css" rel="stylesheet">
+  <style>
+    :root {
+      --sqlhelp-header-bg: #1e3a5f;
+      --sqlhelp-accent: #0d6efd;
+    }
+    body {
+      background: #f4f6f9;
+      min-height: 100vh;
+    }
+    .app-header {
+      background: linear-gradient(135deg, var(--sqlhelp-header-bg), #2d5a87);
+      color: #fff;
+    }
+    .mono {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.85rem;
+    }
+    .paste-area {
+      min-height: 220px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+    .sql-output {
+      min-height: 180px;
+      max-height: 420px;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 0.375rem;
+      padding: 1rem;
+    }
+    .col-actions {
+      white-space: nowrap;
+    }
+    .table-responsive-columns th {
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .badge-changed {
+      font-size: 0.7rem;
+    }
+    .section-icon {
+      width: 1.25rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="app-header py-3 mb-4 shadow-sm">
+      <div class="container-fluid px-4">
+        <div class="d-flex align-items-center gap-3">
+          <i class="fal fa-database fa-2x"></i>
+          <div>
+            <h1 class="h4 mb-0">SqlHelp</h1>
+            <p class="mb-0 small opacity-75">Editor de colunas a partir do retorno de <code class="text-white">sp_help</code></p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container-fluid px-4 pb-5">
+      <!-- Entrada -->
+      <section class="card shadow-sm mb-4" v-if="!parsed">
+        <div class="card-header bg-white d-flex align-items-center gap-2">
+          <i class="fal fa-paste section-icon text-primary"></i>
+          <strong>Cole o resultado de sp_help</strong>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            Exemplo: <code>EXEC sp_help 'dbo.ano'</code> — cole todo o texto retornado abaixo.
+          </p>
+          <textarea
+            class="form-control paste-area"
+            v-model="rawInput"
+            placeholder="Cole aqui o texto retornado pelo sp_help..."
+            spellcheck="false"
+          ></textarea>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="button" class="btn btn-primary" @click="parseInput" :disabled="!rawInput.trim()">
+              <i class="fal fa-search me-1"></i> Analisar
+            </button>
+            <button type="button" class="btn btn-outline-secondary" @click="loadSample">
+              <i class="fal fa-file-code me-1"></i> Carregar exemplo
+            </button>
+          </div>
+          <div v-if="parseError" class="alert alert-danger mt-3 mb-0">
+            <i class="fal fa-exclamation-triangle me-1"></i> {{ parseError }}
+          </div>
+        </div>
+      </section>
+
+      <!-- Editor -->
+      <template v-if="parsed">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <button type="button" class="btn btn-outline-secondary btn-sm" @click="reset">
+            <i class="fal fa-arrow-left me-1"></i> Voltar e colar outro
+          </button>
+          <span class="text-muted small" v-if="completionTime">
+            <i class="fal fa-clock me-1"></i> {{ completionTime }}
+          </span>
+        </div>
+
+        <!-- Metadados da tabela -->
+        <section class="card shadow-sm mb-4">
+          <div class="card-header bg-white d-flex align-items-center gap-2">
+            <i class="fal fa-table section-icon text-primary"></i>
+            <strong>Tabela</strong>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-2">
+                <label class="form-label small text-muted">Schema</label>
+                <input type="text" class="form-control form-control-sm mono" v-model="table.schema">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small text-muted">Nome</label>
+                <input type="text" class="form-control form-control-sm mono" v-model="table.name">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small text-muted">Owner</label>
+                <input type="text" class="form-control form-control-sm mono" readonly :value="table.owner">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small text-muted">Tipo</label>
+                <input type="text" class="form-control form-control-sm mono" readonly :value="table.type">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small text-muted">Criada em</label>
+                <input type="text" class="form-control form-control-sm mono" readonly :value="table.created">
+              </div>
+            </div>
+            <p class="mb-0 mt-2 small text-muted mono">
+              Objeto: [{{ table.schema }}].[{{ table.name }}]
+            </p>
+          </div>
+        </section>
+
+        <!-- Colunas -->
+        <section class="card shadow-sm mb-4">
+          <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fal fa-columns section-icon text-success"></i>
+              <strong>Colunas</strong>
+              <span class="badge bg-secondary">{{ columns.length }}</span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-success" @click="addColumn">
+              <i class="fal fa-plus me-1"></i> Nova coluna
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive table-responsive-columns">
+              <table class="table table-hover table-sm mb-0 align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:2rem"></th>
+                    <th>Nome</th>
+                    <th>Tipo SQL</th>
+                    <th style="width:5rem">Tamanho</th>
+                    <th style="width:4rem">Prec</th>
+                    <th style="width:4rem">Scale</th>
+                    <th style="width:5rem">Nulo</th>
+                    <th style="width:5rem">Identity</th>
+                    <th>Default</th>
+                    <th>Nome constraint</th>
+                    <th>Subst. NULL</th>
+                    <th style="width:3rem"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(col, idx) in columns" :key="col._id"
+                      :class="{ 'table-warning': col._status === 'new', 'table-info': col._status === 'modified' && !col._deleted, 'table-danger': col._deleted }">
+                    <td class="text-center">
+                      <span v-if="col._status === 'new'" class="badge bg-success badge-changed" title="Nova">N</span>
+                      <span v-else-if="col._deleted" class="badge bg-danger badge-changed" title="Remover">−</span>
+                      <span v-else-if="col._status === 'modified'" class="badge bg-info text-dark badge-changed" title="Alterada">Δ</span>
+                    </td>
+                    <td>
+                      <input type="text" class="form-control form-control-sm mono"
+                             v-model="col.name" :disabled="col._deleted"
+                             @input="markModified(col)">
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm mono"
+                              v-model="col.type" :disabled="col._deleted"
+                              @change="onTypeChange(col)">
+                        <option v-for="t in sqlTypes" :key="t" :value="t">{{ t }}</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input type="text" class="form-control form-control-sm mono"
+                             v-model="col.lengthDisplay" :disabled="col._deleted || !colNeedsLength(col.type)"
+                             :placeholder="colNeedsLength(col.type) ? 'MAX ou nº' : '—'"
+                             @input="onLengthInput(col)">
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm mono"
+                             v-model.number="col.prec" :disabled="col._deleted || !colNeedsPrecScale(col.type)"
+                             min="1" max="38" @input="markModified(col)">
+                    </td>
+                    <td>
+                      <input type="number" class="form-control form-control-sm mono"
+                             v-model.number="col.scale" :disabled="col._deleted || !colNeedsPrecScale(col.type)"
+                             min="0" max="38" @input="markModified(col)">
+                    </td>
+                    <td class="text-center">
+                      <input type="checkbox" class="form-check-input"
+                             :checked="col.nullable"
+                             :disabled="col._deleted || col.isIdentity"
+                             @change="col.nullable = $event.target.checked; markModified(col)">
+                    </td>
+                    <td class="text-center">
+                      <input type="checkbox" class="form-check-input"
+                             :checked="col.isIdentity"
+                             :disabled="col._deleted"
+                             @change="toggleIdentity(col, $event.target.checked)">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control form-control-sm mono"
+                             v-model="col.defaultValue" :disabled="col._deleted"
+                             placeholder="ex: ((0)), getdate()"
+                             @input="markModified(col)">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control form-control-sm mono"
+                             v-model="col.defaultConstraintName" :disabled="col._deleted"
+                             placeholder="ex: DF_ANO_CD_STATUS"
+                             @input="markModified(col)">
+                    </td>
+                    <td>
+                      <input type="text" class="form-control form-control-sm mono"
+                             v-model="col.nullReplacement" :disabled="col._deleted || !needsNullReplacement(col)"
+                             :title="needsNullReplacement(col) ? 'Valor para UPDATE WHERE coluna IS NULL antes do NOT NULL' : 'Disponível ao alterar de NULL para NOT NULL'"
+                             placeholder="ex: 0, '', getdate()"
+                             @input="markModified(col)">
+                    </td>
+                    <td class="col-actions">
+                      <button type="button" class="btn btn-sm btn-outline-danger"
+                              :title="col._deleted ? 'Desfazer remoção' : 'Remover coluna'"
+                              @click="toggleDelete(col)">
+                        <i :class="col._deleted ? 'fal fa-undo' : 'fal fa-trash-alt'"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small text-muted px-3 py-2 mb-0">
+              <i class="fal fa-info-circle me-1"></i>
+              Identity, PK e FK complexas exigem revisão manual no script gerado.
+              Ao mudar <strong>NULL → NOT NULL</strong>, preencha <strong>Subst. NULL</strong> para gerar o <code>UPDATE</code> antes do <code>ALTER COLUMN</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- Informações somente leitura -->
+        <div class="row g-4 mb-4">
+          <div class="col-lg-6" v-if="indexes.length">
+            <section class="card shadow-sm h-100">
+              <div class="card-header bg-white">
+                <i class="fal fa-key section-icon text-warning"></i>
+                <strong>Índices</strong>
+              </div>
+              <ul class="list-group list-group-flush small mono">
+                <li class="list-group-item" v-for="(ix, i) in indexes" :key="i">
+                  <strong>{{ ix.index_name }}</strong> — {{ ix.index_keys }}
+                </li>
+              </ul>
+            </section>
+          </div>
+          <div class="col-lg-6" v-if="otherConstraints.length">
+            <section class="card shadow-sm h-100">
+              <div class="card-header bg-white">
+                <i class="fal fa-link section-icon text-secondary"></i>
+                <strong>Outras restrições</strong>
+              </div>
+              <ul class="list-group list-group-flush small">
+                <li class="list-group-item" v-for="(c, i) in otherConstraints" :key="i">{{ c }}</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <!-- Gerar SQL -->
+        <section class="card shadow-sm border-primary">
+          <div class="card-header bg-primary text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+              <i class="fal fa-file-export me-1"></i>
+              <strong>Script SQL</strong>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-light" @click="generateScript">
+                <i class="fal fa-sync me-1"></i> Gerar / Atualizar
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-light" @click="copyScript" :disabled="!generatedSql">
+                <i class="fal fa-copy me-1"></i> Copiar
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <p v-if="!generatedSql" class="text-muted mb-2 small">
+              Clique em <strong>Gerar / Atualizar</strong> para montar os comandos <code>ALTER TABLE</code> com base nas alterações.
+            </p>
+            <pre class="sql-output mono mb-0" v-show="generatedSql">{{ generatedSql }}</pre>
+            <div v-if="scriptWarnings.length" class="alert alert-warning mt-3 mb-0 small">
+              <strong><i class="fal fa-exclamation-triangle me-1"></i> Atenção:</strong>
+              <ul class="mb-0 mt-1">
+                <li v-for="(w, i) in scriptWarnings" :key="i">{{ w }}</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </template>
+    </main>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div class="toast align-items-center text-bg-success border-0" ref="toastEl" role="alert">
+        <div class="d-flex">
+          <div class="toast-body">
+            <i class="fal fa-check me-1"></i> {{ toastMessage }}
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/js/vue.js"></script>
+  <script src="src/js/bootstrap-v5.3.8.js"></script>
+  <script>
+    const { createApp } = Vue;
+
+    const SAMPLE_SP_HELP = `Name                                                                                                                             Owner                                                                                                                            Type                            Created_datetime
+-------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- ------------------------------- -----------------------
+ANO                                                                                                                              dbo                                                                                                                              user table                      2026-05-11 15:59:30.080
+
+ 
+ 
+Column_name                                                                                                                      Type                                                                                                                             Computed                            Length      Prec  Scale Nullable                            TrimTrailingBlanks                  FixedLenNullInSource                Collation
+-------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- ----------------------------------- ----------- ----- ----- ----------------------------------- ----------------------------------- ----------------------------------- --------------------------------------------------------------------------------------------------------------------------------
+CD_ANO                                                                                                                           int                                                                                                                              no                                  4           10    0     no                                  (n/a)                               (n/a)                               NULL
+ANO                                                                                                                              int                                                                                                                              no                                  4           10    0     yes                                 (n/a)                               (n/a)                               NULL
+CD_STATUS                                                                                                                        bit                                                                                                                              no                                  1                       yes                                 (n/a)                               (n/a)                               NULL
+DH_TIMESTAMP                                                                                                                     datetime                                                                                                                         no                                  8                       yes                                 (n/a)                               (n/a)                               NULL
+
+ 
+Identity                                                                                                                         Seed                                    Increment                               Not For Replication
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------- --------------------------------------- -------------------
+CD_ANO                                                                                                                           1                                       1                                       0
+
+ 
+RowGuidCol
+--------------------------------------------------------------------------------------------------------------------------------
+No rowguidcol column defined.
+
+ 
+Data_located_on_filegroup
+--------------------------------------------------------------------------------------------------------------------------------
+PRIMARY
+
+ 
+index_name                                                                                                                       index_description                                                                                                                                                                                                  index_keys
+-------------------------------------------------------------------------------------------------------------------------------- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PK_dbo_ANO                                                                                                                       clustered, unique, primary key located on PRIMARY                                                                                                                                                                  CD_ANO
+
+ 
+constraint_type                                                                                                                                                                                                                                                  constraint_name                                                                                                                  delete_action update_action status_enabled status_for_replication constraint_keys
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- ------------- ------------- -------------- ---------------------- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+DEFAULT on column CD_STATUS                                                                                                                                                                                                                                      DF_ANO_CD_STATUS                                                                                                                 (n/a)         (n/a)         (n/a)          (n/a)                  ((1))
+DEFAULT on column DH_TIMESTAMP                                                                                                                                                                                                                                   DF_ANO_DH_TIMESTAMP                                                                                                              (n/a)         (n/a)         (n/a)          (n/a)                  (getdate())
+PRIMARY KEY (clustered)                                                                                                                                                                                                                                          PK_dbo_ANO                                                                                                                       (n/a)         (n/a)         (n/a)          (n/a)                  CD_ANO
+
+ 
+No foreign keys reference table 'dbo.ano', or you do not have permissions on referencing tables.
+No views with schema binding reference table 'dbo.ano'.
+
+Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
+
+    function splitFixedColumns(line) {
+      return line.split(/\s{2,}/).map(s => s.trim()).filter(s => s.length > 0);
+    }
+
+    function parseBoolNullable(val) {
+      if (!val) return true;
+      const v = String(val).trim().toLowerCase();
+      return v === 'yes' || v === 'sim';
+    }
+
+    function parseComputed(val) {
+      return String(val || '').trim().toLowerCase() === 'yes';
+    }
+
+    function nextId() {
+      return 'c_' + Math.random().toString(36).slice(2, 11);
+    }
+
+    const LENGTH_TYPES = ['varchar', 'nvarchar', 'char', 'nchar', 'varbinary', 'binary'];
+    const PRECSCALE_TYPES = ['decimal', 'numeric'];
+    const SCALE_TYPES = ['datetime2', 'datetimeoffset', 'time'];
+    /**
+     * sp_help alinha colunas com espaços; quando Prec/Scale vêm vazios o split
+     * por índice fixo desloca Nullable. Os últimos 4 campos são estáveis:
+     * Nullable, TrimTrailingBlanks, FixedLenNullInSource, Collation.
+     */
+    function parseColumnRow(parts) {
+      if (parts.length < 7) return null;
+      const tail = parts.slice();
+      const row = {
+        Collation: tail.pop() || '',
+        FixedLenNullInSource: tail.pop() || '',
+        TrimTrailingBlanks: tail.pop() || '',
+        Nullable: tail.pop() || '',
+        Column_name: tail.shift() || '',
+        Type: tail.shift() || '',
+        Computed: tail.shift() || '',
+        Length: '',
+        Prec: '',
+        Scale: ''
+      };
+      if (tail.length === 1) {
+        row.Length = tail[0];
+      } else if (tail.length === 2) {
+        row.Length = tail[0];
+        row.Prec = tail[1];
+      } else if (tail.length >= 3) {
+        row.Length = tail[0];
+        row.Prec = tail[1];
+        row.Scale = tail[2];
+      }
+      return row;
+    }
+
+    function parseOptionalInt(val) {
+      if (val === undefined || val === null || val === '') return null;
+      const n = parseInt(val, 10);
+      return isNaN(n) ? null : n;
+    }
+
+    function parseSpHelp(text) {
+      const lines = text.split(/\r?\n/);
+      const result = {
+        table: { name: '', schema: 'dbo', owner: '', type: '', created: '' },
+        columns: [],
+        identity: {},
+        indexes: [],
+        constraints: [],
+        completionTime: ''
+      };
+
+      let i = 0;
+      const findSection = (headerTest) => {
+        for (let j = 0; j < lines.length; j++) {
+          if (headerTest(lines[j])) return j;
+        }
+        return -1;
+      };
+
+      const readSectionRows = (headerIdx) => {
+        const headerLine = lines[headerIdx];
+        const headers = splitFixedColumns(headerLine);
+        let rowIdx = headerIdx + 1;
+        if (rowIdx < lines.length && /^-+$/.test(lines[rowIdx].replace(/\s/g, '').slice(0, 20) || lines[rowIdx].trim().replace(/-/g, ''))) {
+          rowIdx++;
+        }
+        while (rowIdx < lines.length && lines[rowIdx].trim() && !/^-{5,}/.test(lines[rowIdx].trim().substring(0, 5))) {
+          const parts = splitFixedColumns(lines[rowIdx]);
+          if (parts.length >= 2) {
+            const row = {};
+            headers.forEach((h, k) => { row[h] = parts[k] !== undefined ? parts[k] : ''; });
+            result._pushRow && result._pushRow(row);
+          }
+          rowIdx++;
+        }
+        return rowIdx;
+      };
+
+      // Table info
+      const nameIdx = findSection(l => l.includes('Name') && l.includes('Owner') && l.includes('Type') && l.includes('Created'));
+      if (nameIdx >= 0) {
+        const headers = splitFixedColumns(lines[nameIdx]);
+        let ri = nameIdx + 2;
+        if (ri < lines.length) {
+          const vals = splitFixedColumns(lines[ri]);
+          const map = {};
+          headers.forEach((h, k) => { map[h] = vals[k] || ''; });
+          result.table.name = map.Name || map.name || '';
+          result.table.owner = map.Owner || map.owner || 'dbo';
+          result.table.schema = result.table.owner;
+          result.table.type = map.Type || '';
+          result.table.created = map.Created_datetime || '';
+        }
+      }
+
+      // Columns
+      const colIdx = findSection(l => l.trim().startsWith('Column_name'));
+      if (colIdx < 0) {
+        throw new Error('Seção de colunas (Column_name) não encontrada. Verifique se o texto é o retorno completo do sp_help.');
+      }
+      let ri = colIdx + 2;
+      while (ri < lines.length && lines[ri].trim()) {
+        const parts = splitFixedColumns(lines[ri]);
+        if (parts.length >= 2 && parts[0] !== 'Identity') {
+          const row = parseColumnRow(parts);
+          if (!row) { ri++; continue; }
+          const col = {
+            _id: nextId(),
+            _status: 'unchanged',
+            _deleted: false,
+            _original: null,
+            name: row.Column_name,
+            type: (row.Type || 'varchar').toLowerCase(),
+            computed: parseComputed(row.Computed),
+            length: parseOptionalInt(row.Length),
+            prec: parseOptionalInt(row.Prec),
+            scale: parseOptionalInt(row.Scale) ?? 0,
+            nullable: parseBoolNullable(row.Nullable),
+            collation: row.Collation === 'NULL' ? null : (row.Collation || null),
+            isIdentity: false,
+            identitySeed: null,
+            identityIncrement: null,
+            defaultValue: '',
+            defaultConstraintName: '',
+            nullReplacement: ''
+          };
+          col.lengthDisplay = col.length != null ? String(col.length) : '';
+          col._original = snapshotColumn(col);
+          result.columns.push(col);
+        }
+        ri++;
+      }
+
+      // Identity
+      const idIdx = findSection(l => l.trim().startsWith('Identity') && l.includes('Seed'));
+      if (idIdx >= 0 && idIdx + 2 < lines.length) {
+        const parts = splitFixedColumns(lines[idIdx + 2]);
+        if (parts.length >= 3) {
+          const col = result.columns.find(c => c.name === parts[0]);
+          if (col) {
+            col.isIdentity = true;
+            col.identitySeed = parseInt(parts[1], 10) || 1;
+            col.identityIncrement = parseInt(parts[2], 10) || 1;
+            col.nullable = false;
+            col._original = snapshotColumn(col);
+          }
+        }
+      }
+
+      // Indexes
+      const ixIdx = findSection(l => l.trim().startsWith('index_name'));
+      if (ixIdx >= 0) {
+        let j = ixIdx + 2;
+        while (j < lines.length && lines[j].trim() && !lines[j].trim().startsWith('constraint_type')) {
+          const parts = splitFixedColumns(lines[j]);
+          if (parts.length >= 2) {
+            result.indexes.push({
+              index_name: parts[0],
+              index_description: parts[1] || '',
+              index_keys: parts.slice(2).join(' ') || parts[1]
+            });
+          }
+          j++;
+        }
+      }
+
+      // Constraints (defaults, PK, etc.)
+      const ctIdx = findSection(l => l.trim().startsWith('constraint_type'));
+      if (ctIdx >= 0) {
+        let j = ctIdx + 2;
+        while (j < lines.length && lines[j].trim() && !/^No foreign keys/i.test(lines[j]) && !/^Horário de conclusão/i.test(lines[j])) {
+          const parts = splitFixedColumns(lines[j]);
+          if (parts.length >= 2) {
+            const ctype = parts[0];
+            const cname = parts[1];
+            const keys = parts[parts.length - 1] || '';
+            result.constraints.push({ type: ctype, name: cname, keys });
+
+            const defMatch = /^DEFAULT on column\s+(.+)$/i.exec(ctype);
+            if (defMatch) {
+              const colName = defMatch[1].trim();
+              const col = result.columns.find(c => c.name === colName);
+              if (col) {
+                col.defaultValue = keys;
+                col.defaultConstraintName = cname;
+                col._original = snapshotColumn(col);
+              }
+            }
+          }
+          j++;
+        }
+      }
+
+      const timeLine = lines.find(l => /^Horário de conclusão:/i.test(l.trim()));
+      if (timeLine) {
+        result.completionTime = timeLine.trim();
+      }
+
+      if (!result.table.name && result.columns.length) {
+        result.table.name = 'Tabela';
+      }
+      if (!result.columns.length) {
+        throw new Error('Nenhuma coluna foi identificada no texto.');
+      }
+
+      return result;
+    }
+
+    function snapshotColumn(col) {
+      return JSON.parse(JSON.stringify({
+        name: col.name,
+        type: col.type,
+        length: col.length,
+        lengthDisplay: col.lengthDisplay,
+        prec: col.prec,
+        scale: col.scale,
+        nullable: col.nullable,
+        isIdentity: col.isIdentity,
+        defaultValue: col.defaultValue,
+        defaultConstraintName: col.defaultConstraintName
+      }));
+    }
+
+    function buildTypeSql(col) {
+      const t = (col.type || 'varchar').toLowerCase();
+      if (LENGTH_TYPES.includes(t)) {
+        const len = (col.lengthDisplay || '').toString().trim().toUpperCase();
+        const n = len === 'MAX' ? 'MAX' : (parseInt(len, 10) || col.length || 50);
+        return `${t}(${n})`;
+      }
+      if (PRECSCALE_TYPES.includes(t)) {
+        const p = col.prec != null ? col.prec : 18;
+        const s = col.scale != null ? col.scale : 0;
+        return `${t}(${p}, ${s})`;
+      }
+      if (SCALE_TYPES.includes(t) && col.scale != null && col.scale > 0) {
+        return `${t}(${col.scale})`;
+      }
+      return t;
+    }
+
+    function formatNullReplacementSql(value, type) {
+      const v = (value || '').trim();
+      if (!v) return null;
+      if (/^N'.+'$/i.test(v) || /^'.+'$/.test(v)) return v;
+      if (/^\(\(.+\)\)$/.test(v)) return v;
+      if (/^0x[0-9a-f]+$/i.test(v)) return v;
+      if (/^[a-zA-Z_@][\w.]*\s*\(/i.test(v)) return v;
+      const t = (type || '').toLowerCase();
+      const numericTypes = ['int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'float', 'real', 'money', 'smallmoney'];
+      if (t === 'bit') {
+        if (/^(0|1|true|false)$/i.test(v)) return /^(1|true)$/i.test(v) ? '1' : '0';
+      }
+      if (numericTypes.includes(t) && /^-?\d+(\.\d+)?$/.test(v)) return v;
+      if (v.toUpperCase() === 'NULL') return 'NULL';
+      return `N'${v.replace(/'/g, "''")}'`;
+    }
+
+    function columnsEqual(a, b) {
+      return a.name === b.name &&
+        a.type === b.type &&
+        (a.lengthDisplay || '') === (b.lengthDisplay || '') &&
+        a.prec === b.prec &&
+        a.scale === b.scale &&
+        a.nullable === b.nullable &&
+        a.isIdentity === b.isIdentity &&
+        (a.defaultValue || '') === (b.defaultValue || '') &&
+        (a.defaultConstraintName || '') === (b.defaultConstraintName || '');
+    }
+
+    createApp({
+      data() {
+        return {
+          rawInput: '',
+          parseError: '',
+          parsed: false,
+          completionTime: '',
+          table: { name: '', schema: 'dbo', owner: '', type: '', created: '' },
+          columns: [],
+          indexes: [],
+          constraints: [],
+          generatedSql: '',
+          scriptWarnings: [],
+          toastMessage: '',
+          sqlTypes: [
+            'bigint', 'binary', 'bit', 'char', 'date', 'datetime', 'datetime2',
+            'datetimeoffset', 'decimal', 'float', 'geography', 'geometry', 'image',
+            'int', 'money', 'nchar', 'ntext', 'numeric', 'nvarchar', 'real', 'smalldatetime',
+            'smallint', 'smallmoney', 'sql_variant', 'text', 'time', 'timestamp',
+            'tinyint', 'uniqueidentifier', 'varbinary', 'varchar', 'xml'
+          ]
+        };
+      },
+      computed: {
+        otherConstraints() {
+          return this.constraints
+            .filter(c => !/^DEFAULT on column/i.test(c.type))
+            .map(c => `${c.type} — ${c.name} (${c.keys})`);
+        }
+      },
+      methods: {
+        loadSample() {
+          this.rawInput = SAMPLE_SP_HELP;
+          this.parseError = '';
+        },
+        parseInput() {
+          this.parseError = '';
+          try {
+            const data = parseSpHelp(this.rawInput);
+            this.table = { ...data.table };
+            this.columns = data.columns;
+            this.indexes = data.indexes;
+            this.constraints = data.constraints;
+            this.completionTime = data.completionTime;
+            this.parsed = true;
+            this.generatedSql = '';
+            this.scriptWarnings = [];
+          } catch (e) {
+            this.parseError = e.message || 'Erro ao analisar o texto.';
+          }
+        },
+        reset() {
+          this.parsed = false;
+          this.generatedSql = '';
+          this.scriptWarnings = [];
+        },
+        colNeedsLength(type) {
+          return LENGTH_TYPES.includes((type || '').toLowerCase());
+        },
+        colNeedsPrecScale(type) {
+          const t = (type || '').toLowerCase();
+          return PRECSCALE_TYPES.includes(t) || SCALE_TYPES.includes(t);
+        },
+        onTypeChange(col) {
+          if (!this.colNeedsLength(col.type)) {
+            col.lengthDisplay = '';
+            col.length = null;
+          }
+          if (!this.colNeedsPrecScale(col.type)) {
+            col.prec = null;
+            col.scale = 0;
+          }
+          this.markModified(col);
+        },
+        onLengthInput(col) {
+          const v = (col.lengthDisplay || '').trim().toUpperCase();
+          col.length = v === 'MAX' ? -1 : (parseInt(v, 10) || null);
+          this.markModified(col);
+        },
+        markModified(col) {
+          if (col._status === 'new' || col._deleted) return;
+          if (col._original && !columnsEqual(col, col._original)) {
+            col._status = 'modified';
+          } else {
+            col._status = 'unchanged';
+          }
+        },
+        toggleIdentity(col, checked) {
+          col.isIdentity = checked;
+          if (checked) {
+            col.nullable = false;
+            col.identitySeed = col.identitySeed || 1;
+            col.identityIncrement = col.identityIncrement || 1;
+          }
+          this.markModified(col);
+        },
+        addColumn() {
+          this.columns.push({
+            _id: nextId(),
+            _status: 'new',
+            _deleted: false,
+            _original: null,
+            name: 'NOVA_COLUNA',
+            type: 'int',
+            computed: false,
+            length: null,
+            lengthDisplay: '',
+            prec: null,
+            scale: 0,
+            nullable: true,
+            collation: null,
+            isIdentity: false,
+            identitySeed: 1,
+            identityIncrement: 1,
+            defaultValue: '',
+            defaultConstraintName: '',
+            nullReplacement: ''
+          });
+        },
+        needsNullReplacement(col) {
+          if (col._deleted || col.nullable || col._status === 'new') return false;
+          const orig = col._original;
+          return !!(orig && orig.nullable && !col.nullable);
+        },
+        toggleDelete(col) {
+          if (col._status === 'new') {
+            this.columns = this.columns.filter(c => c._id !== col._id);
+            return;
+          }
+          col._deleted = !col._deleted;
+          if (col._deleted) col._status = 'modified';
+          else this.markModified(col);
+        },
+        qualifiedTable() {
+          const schema = (this.table.schema || 'dbo').trim();
+          const name = (this.table.name || '').trim();
+          return `[${schema}].[${name}]`;
+        },
+        generateScript() {
+          const lines = [];
+          const warnings = [];
+          const schema = (this.table.schema || 'dbo').trim();
+          const table = (this.table.name || '').trim();
+          const qTable = this.qualifiedTable();
+
+          lines.push('-- SqlHelp: script gerado a partir do sp_help');
+          lines.push(`-- Tabela: ${qTable}`);
+          lines.push(`-- Data: ${new Date().toISOString()}`);
+          lines.push('');
+          lines.push('SET NOCOUNT ON;');
+          lines.push('GO');
+          lines.push('');
+
+          let hasChanges = false;
+
+          // Remoções
+          for (const col of this.columns.filter(c => c._deleted && c._status !== 'new')) {
+            hasChanges = true;
+            if (col.defaultConstraintName) {
+              lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${col.defaultConstraintName}];`);
+              lines.push('GO');
+            }
+            lines.push(`ALTER TABLE ${qTable} DROP COLUMN [${col.name}];`);
+            lines.push('GO');
+            lines.push('');
+          }
+
+          // Renomeações e alterações
+          for (const col of this.columns.filter(c => !c._deleted && c._status !== 'new')) {
+            const orig = col._original;
+            if (!orig) continue;
+
+            if (col.name !== orig.name) {
+              hasChanges = true;
+              lines.push(`EXEC sp_rename N'${schema}.${table}.${orig.name}', N'${col.name}', 'COLUMN';`);
+              lines.push('GO');
+              warnings.push(`Renomear coluna ${orig.name} → ${col.name}: confira dependências (índices, FK, views).`);
+            }
+
+            const typeChanged = col.type !== orig.type ||
+              (col.lengthDisplay || '') !== (orig.lengthDisplay || '') ||
+              col.prec !== orig.prec ||
+              col.scale !== orig.scale;
+            const nullChanged = col.nullable !== orig.nullable;
+            const defChanged = (col.defaultValue || '') !== (orig.defaultValue || '') ||
+              (col.defaultConstraintName || '') !== (orig.defaultConstraintName || '');
+
+            const goingNotNull = orig.nullable && !col.nullable;
+            if ((typeChanged || nullChanged) && goingNotNull) {
+              const replSql = formatNullReplacementSql(col.nullReplacement, col.type);
+              if (replSql) {
+                hasChanges = true;
+                lines.push(`-- Preencher NULL em [${col.name}] antes de NOT NULL`);
+                lines.push(`UPDATE ${qTable} SET [${col.name}] = ${replSql} WHERE [${col.name}] IS NULL;`);
+                lines.push('GO');
+                lines.push('');
+              } else {
+                warnings.push(`Coluna [${col.name}]: informe "Subst. NULL" para atualizar registros nulos antes do NOT NULL.`);
+              }
+            }
+
+            if (typeChanged || nullChanged) {
+              hasChanges = true;
+              const typeSql = buildTypeSql(col);
+              const nullSql = col.nullable ? 'NULL' : 'NOT NULL';
+              lines.push(`ALTER TABLE ${qTable} ALTER COLUMN [${col.name}] ${typeSql} ${nullSql};`);
+              lines.push('GO');
+              if (col.isIdentity && !orig.isIdentity) {
+                warnings.push(`Identity em [${col.name}]: ALTER COLUMN não cria identity. Use criação de coluna nova ou recriação da tabela.`);
+              }
+              if (orig.isIdentity && !col.isIdentity) {
+                warnings.push(`Remover identity de [${col.name}] exige script adicional (não gerado automaticamente).`);
+              }
+            }
+
+            if (defChanged) {
+              hasChanges = true;
+              if (orig.defaultConstraintName) {
+                lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${orig.defaultConstraintName}];`);
+                lines.push('GO');
+              }
+              if (col.defaultValue && col.defaultValue.trim()) {
+                const defName = col.defaultConstraintName ||
+                  `DF_${table}_${col.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+                lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${defName}] DEFAULT ${col.defaultValue.trim()} FOR [${col.name}];`);
+                lines.push('GO');
+              }
+            }
+            if (col.isIdentity !== orig.isIdentity ||
+              col.identitySeed !== orig.identitySeed ||
+              col.identityIncrement !== orig.identityIncrement) {
+              if (col.isIdentity !== orig.isIdentity) {
+                warnings.push('Alterações de IDENTITY não são aplicadas automaticamente neste script.');
+              }
+            }
+            lines.push('');
+          }
+
+          // Novas colunas
+          for (const col of this.columns.filter(c => c._status === 'new' && !c._deleted)) {
+            hasChanges = true;
+            const typeSql = buildTypeSql(col);
+            const nullSql = col.nullable ? 'NULL' : 'NOT NULL';
+            let line = `ALTER TABLE ${qTable} ADD [${col.name}] ${typeSql} ${nullSql}`;
+            if (col.isIdentity) {
+              line += ` IDENTITY(${col.identitySeed || 1}, ${col.identityIncrement || 1})`;
+              warnings.push(`Nova coluna identity [${col.name}]: só é permitida em tabela vazia ou com cuidado extra.`);
+            }
+            line += ';';
+            lines.push(line);
+            lines.push('GO');
+            if (col.defaultValue && col.defaultValue.trim()) {
+              const defName = (col.defaultConstraintName && col.defaultConstraintName.trim()) ||
+                `DF_${table}_${col.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
+              lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${defName}] DEFAULT ${col.defaultValue.trim()} FOR [${col.name}];`);
+              lines.push('GO');
+            }
+            lines.push('');
+          }
+
+          if (!hasChanges) {
+            lines.push('-- Nenhuma alteração detectada em relação ao sp_help original.');
+          } else {
+            lines.push('-- Revise o script antes de executar em produção.');
+          }
+
+          this.generatedSql = lines.join('\n');
+          this.scriptWarnings = warnings;
+        },
+        copyScript() {
+          if (!this.generatedSql) return;
+          navigator.clipboard.writeText(this.generatedSql).then(() => {
+            this.showToast('Script copiado para a área de transferência.');
+          }).catch(() => {
+            this.showToast('Não foi possível copiar. Selecione o texto manualmente.');
+          });
+        },
+        showToast(msg) {
+          this.toastMessage = msg;
+          const el = this.$refs.toastEl;
+          if (el && window.bootstrap) {
+            const t = bootstrap.Toast.getOrCreateInstance(el);
+            t.show();
+          }
+        }
+      },
+    }).mount('#app');
+  </script>
+</body>
+</html>
