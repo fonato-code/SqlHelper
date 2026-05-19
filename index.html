@@ -1,57 +1,185 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SqlHelp — Editor de colunas (sp_help)</title>
+  <script>
+    (function () {
+      var t = localStorage.getItem('sqlhelp-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <link href="src/css/bootsrtap-v5.3.8.css" rel="stylesheet">
   <link href="src/fontawesome5pro/fontawesome-pro-5.8.2.css" rel="stylesheet">
   <style>
-    :root {
+    :root,
+    [data-theme="light"] {
       --sqlhelp-header-bg: #1e3a5f;
-      --sqlhelp-accent: #0d6efd;
+      --sqlhelp-header-end: #2d5a87;
+      --bg-body: #f4f6f9;
+      --bg-card: #ffffff;
+      --bg-card-header: #ffffff;
+      --bg-table-head: #f8f9fa;
+      --bg-input: #ffffff;
+      --text-main: #212529;
+      --text-muted: #6c757d;
+      --border: #dee2e6;
+      --row-new: rgba(255, 193, 7, 0.35);
+      --row-modified: rgba(13, 202, 240, 0.2);
+      --row-deleted: rgba(220, 53, 69, 0.2);
+      --sql-bg: #1e1e1e;
+      --sql-color: #d4d4d4;
+      --theme-toggle-bg: rgba(255, 255, 255, 0.12);
+      --theme-toggle-border: rgba(255, 255, 255, 0.35);
+      --theme-toggle-color: #fff;
     }
+
+    [data-theme="dark"] {
+      --sqlhelp-header-bg: #0f2744;
+      --sqlhelp-header-end: #1a3d66;
+      --bg-body: #0f1117;
+      --bg-card: #1a1d24;
+      --bg-card-header: #22262f;
+      --bg-table-head: #252a34;
+      --bg-input: #2a2f3a;
+      --text-main: #e8eaed;
+      --text-muted: #9aa0a6;
+      --border: #3c424d;
+      --row-new: rgba(255, 193, 7, 0.12);
+      --row-modified: rgba(13, 202, 240, 0.12);
+      --row-deleted: rgba(220, 53, 69, 0.15);
+      --sql-bg: #0d0d0d;
+      --sql-color: #d4d4d4;
+      --theme-toggle-bg: rgba(255, 255, 255, 0.08);
+      --theme-toggle-border: rgba(255, 255, 255, 0.25);
+      --theme-toggle-color: #e8eaed;
+    }
+
     body {
-      background: #f4f6f9;
+      background: var(--bg-body);
+      color: var(--text-main);
       min-height: 100vh;
+      transition: background-color 0.2s ease, color 0.2s ease;
     }
+
     .app-header {
-      background: linear-gradient(135deg, var(--sqlhelp-header-bg), #2d5a87);
+      background: linear-gradient(135deg, var(--sqlhelp-header-bg), var(--sqlhelp-header-end));
       color: #fff;
     }
+
+    .theme-toggle-btn {
+      background: var(--theme-toggle-bg);
+      border: 1px solid var(--theme-toggle-border);
+      color: var(--theme-toggle-color);
+    }
+
+    .theme-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+
+    .card-header:not(.bg-primary) {
+      background: var(--bg-card-header) !important;
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+
+    .table {
+      --bs-table-bg: transparent;
+      --bs-table-color: var(--text-main);
+      --bs-table-border-color: var(--border);
+      color: var(--text-main);
+    }
+
+    .table thead th,
+    .table-light {
+      --bs-table-bg: var(--bg-table-head);
+      --bs-table-color: var(--text-main);
+      background-color: var(--bg-table-head) !important;
+      color: var(--text-main) !important;
+      border-color: var(--border) !important;
+    }
+
+    .table-hover > tbody > tr:hover > * {
+      --bs-table-bg-state: var(--bg-table-head);
+      color: var(--text-main);
+    }
+
+  tr.table-warning > * { background-color: var(--row-new) !important; }
+    tr.table-info > * { background-color: var(--row-modified) !important; }
+    tr.table-danger > * { background-color: var(--row-deleted) !important; }
+
+    .form-control,
+    .form-select {
+      background-color: var(--bg-input);
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+      background-color: var(--bg-input);
+      color: var(--text-main);
+    }
+
+    .form-control:disabled,
+    .form-select:disabled {
+      background-color: var(--bg-table-head);
+      color: var(--text-muted);
+    }
+
+    .text-muted { color: var(--text-muted) !important; }
+    .list-group-item {
+      background: var(--bg-card);
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+
     .mono {
       font-family: Consolas, "Courier New", monospace;
       font-size: 0.85rem;
     }
+
     .paste-area {
       min-height: 220px;
       font-family: Consolas, "Courier New", monospace;
       font-size: 0.8rem;
       line-height: 1.35;
     }
+
     .sql-output {
       min-height: 180px;
       max-height: 420px;
       overflow: auto;
       white-space: pre-wrap;
-      background: #1e1e1e;
-      color: #d4d4d4;
+      background: var(--sql-bg);
+      color: var(--sql-color);
       border-radius: 0.375rem;
       padding: 1rem;
     }
-    .col-actions {
-      white-space: nowrap;
-    }
+
+    .col-actions { white-space: nowrap; }
+
     .table-responsive-columns th {
       font-size: 0.8rem;
       white-space: nowrap;
     }
-    .badge-changed {
-      font-size: 0.7rem;
-    }
-    .section-icon {
-      width: 1.25rem;
-      text-align: center;
+
+    .badge-changed { font-size: 0.7rem; }
+    .section-icon { width: 1.25rem; text-align: center; }
+
+    [data-theme="dark"] .alert-warning {
+      background-color: #3d3216;
+      border-color: #5c4a1a;
+      color: #f5e6b8;
     }
   </style>
 </head>
@@ -59,12 +187,18 @@
   <div id="app">
     <header class="app-header py-3 mb-4 shadow-sm">
       <div class="container-fluid px-4">
-        <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center gap-3 w-100">
           <i class="fal fa-database fa-2x"></i>
-          <div>
+          <div class="flex-grow-1">
             <h1 class="h4 mb-0">SqlHelp</h1>
             <p class="mb-0 small opacity-75">Editor de colunas a partir do retorno de <code class="text-white">sp_help</code></p>
           </div>
+          <button type="button" class="btn btn-sm theme-toggle-btn"
+                  @click="toggleTheme"
+                  :title="theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'">
+            <i class="fal" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+            <span class="ms-1 d-none d-sm-inline">{{ theme === 'dark' ? 'Claro' : 'Escuro' }}</span>
+          </button>
         </div>
       </div>
     </header>
@@ -72,7 +206,7 @@
     <main class="container-fluid px-4 pb-5">
       <!-- Entrada -->
       <section class="card shadow-sm mb-4" v-if="!parsed">
-        <div class="card-header bg-white d-flex align-items-center gap-2">
+        <div class="card-header d-flex align-items-center gap-2">
           <i class="fal fa-paste section-icon text-primary"></i>
           <strong>Cole o resultado de sp_help</strong>
         </div>
@@ -113,7 +247,7 @@
 
         <!-- Metadados da tabela -->
         <section class="card shadow-sm mb-4">
-          <div class="card-header bg-white d-flex align-items-center gap-2">
+          <div class="card-header d-flex align-items-center gap-2">
             <i class="fal fa-table section-icon text-primary"></i>
             <strong>Tabela</strong>
           </div>
@@ -143,12 +277,26 @@
             <p class="mb-0 mt-2 small text-muted mono">
               Objeto: [{{ table.schema }}].[{{ table.name }}]
             </p>
+            <div class="form-check mt-3 mb-0" v-if="hasIdentityColumn">
+              <input type="checkbox" class="form-check-input" id="reseedIdentity" v-model="reseedIdentity">
+              <label class="form-check-label" for="reseedIdentity">
+                <i class="fal fa-redo me-1"></i> Reseed identity
+              </label>
+              <p class="small text-muted mb-0 ms-4">
+                Gera <code>DBCC CHECKIDENT</code> com o maior valor atual da coluna identity
+                <span v-if="identityColumns.length">({{ identityColumns.map(c => c.name).join(', ') }})</span>,
+                para que o próximo <code>INSERT</code> seja <strong>MAX + increment</strong> (ex.: seed 1001 e MAX 5 → próximo 6).
+              </p>
+            </div>
+            <p v-else class="small text-muted mb-0 mt-3">
+              <i class="fal fa-info-circle me-1"></i> Nenhuma coluna identity — reseed não disponível.
+            </p>
           </div>
         </section>
 
         <!-- Colunas -->
         <section class="card shadow-sm mb-4">
-          <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div class="d-flex align-items-center gap-2">
               <i class="fal fa-columns section-icon text-success"></i>
               <strong>Colunas</strong>
@@ -171,8 +319,7 @@
                     <th style="width:4rem">Scale</th>
                     <th style="width:5rem">Nulo</th>
                     <th style="width:5rem">Identity</th>
-                    <th>Default</th>
-                    <th>Nome constraint</th>
+                    <th style="min-width:10rem">Default</th>
                     <th>Subst. NULL</th>
                     <th style="width:3rem"></th>
                   </tr>
@@ -226,16 +373,26 @@
                              @change="toggleIdentity(col, $event.target.checked)">
                     </td>
                     <td>
-                      <input type="text" class="form-control form-control-sm mono"
-                             v-model="col.defaultValue" :disabled="col._deleted"
-                             placeholder="ex: ((0)), getdate()"
-                             @input="markModified(col)">
-                    </td>
-                    <td>
-                      <input type="text" class="form-control form-control-sm mono"
-                             v-model="col.defaultConstraintName" :disabled="col._deleted"
-                             placeholder="ex: DF_ANO_CD_STATUS"
-                             @input="markModified(col)">
+                      <div class="d-flex flex-column gap-1">
+                        <div class="form-check mb-0">
+                          <input type="checkbox" class="form-check-input"
+                                 :id="'def-' + col._id"
+                                 :checked="col.hasDefault"
+                                 :disabled="col._deleted"
+                                 @change="toggleDefault(col, $event.target.checked)">
+                          <label class="form-check-label small" :for="'def-' + col._id">Default</label>
+                        </div>
+                        <template v-if="col.hasDefault">
+                          <input type="text" class="form-control form-control-sm mono"
+                                 v-model="col.defaultValue" :disabled="col._deleted"
+                                 placeholder="Valor: ((0)), getdate()"
+                                 @input="markModified(col)">
+                          <input type="text" class="form-control form-control-sm mono"
+                                 v-model="col.defaultConstraintName" :disabled="col._deleted"
+                                 placeholder="Nome: DF_TABELA_COL"
+                                 @input="markModified(col)">
+                        </template>
+                      </div>
                     </td>
                     <td>
                       <input type="text" class="form-control form-control-sm mono"
@@ -257,22 +414,74 @@
             </div>
             <p class="small text-muted px-3 py-2 mb-0">
               <i class="fal fa-info-circle me-1"></i>
-              Identity, PK e FK complexas exigem revisão manual no script gerado.
+              FK e índices não-PK exigem revisão manual no script gerado.
               Ao mudar <strong>NULL → NOT NULL</strong>, preencha <strong>Subst. NULL</strong> para gerar o <code>UPDATE</code> antes do <code>ALTER COLUMN</code>.
             </p>
           </div>
         </section>
 
+        <!-- Primary Key -->
+        <section class="card shadow-sm mb-4">
+          <div class="card-header d-flex align-items-center gap-2">
+            <i class="fal fa-key section-icon text-warning"></i>
+            <strong>Primary Key</strong>
+          </div>
+          <div class="card-body">
+            <div class="form-check mb-3">
+              <input type="checkbox" class="form-check-input" id="pkEnabled" v-model="primaryKey.enabled"
+                     @change="onPrimaryKeyToggle">
+              <label class="form-check-label" for="pkEnabled">Tabela possui primary key</label>
+            </div>
+            <template v-if="primaryKey.enabled">
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label small text-muted">Nome da constraint</label>
+                  <input type="text" class="form-control form-control-sm mono"
+                         v-model="primaryKey.name" placeholder="ex: PK_dbo_ANO"
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                  <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input" id="pkClustered"
+                           v-model="primaryKey.clustered">
+                    <label class="form-check-label" for="pkClustered">CLUSTERED</label>
+                  </div>
+                </div>
+              </div>
+              <label class="form-label small text-muted mb-2">Colunas da chave (ordem de seleção)</label>
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <label v-for="col in pkSelectableColumns" :key="col._id"
+                       class="btn btn-sm"
+                       :class="isPkColumnSelected(col.name) ? 'btn-warning' : 'btn-outline-secondary'">
+                  <input type="checkbox" class="form-check-input me-1 d-inline-block"
+                         :checked="isPkColumnSelected(col.name)"
+                         @change="togglePkColumn(col.name, $event.target.checked)">
+                  <span class="mono">{{ col.name }}</span>
+                </label>
+              </div>
+              <p v-if="primaryKey.columns.length" class="small mono mb-0 text-muted">
+                Ordem: {{ primaryKey.columns.join(', ') }}
+                <button type="button" class="btn btn-link btn-sm p-0 ms-2" v-if="primaryKey.columns.length > 1"
+                        @click="movePkColumn(-1)">↑ subir última</button>
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1" v-if="primaryKey.columns.length > 1"
+                        @click="movePkColumn(1)">↓ descer primeira</button>
+              </p>
+              <p v-else class="small text-warning mb-0">
+                <i class="fal fa-exclamation-triangle me-1"></i> Selecione ao menos uma coluna.
+              </p>
+            </template>
+          </div>
+        </section>
+
         <!-- Informações somente leitura -->
         <div class="row g-4 mb-4">
-          <div class="col-lg-6" v-if="indexes.length">
+          <div class="col-lg-6" v-if="nonPkIndexes.length">
             <section class="card shadow-sm h-100">
-              <div class="card-header bg-white">
-                <i class="fal fa-key section-icon text-warning"></i>
+              <div class="card-header">
+                <i class="fal fa-list section-icon text-secondary"></i>
                 <strong>Índices</strong>
               </div>
               <ul class="list-group list-group-flush small mono">
-                <li class="list-group-item" v-for="(ix, i) in indexes" :key="i">
+                <li class="list-group-item" v-for="(ix, i) in nonPkIndexes" :key="i">
                   <strong>{{ ix.index_name }}</strong> — {{ ix.index_keys }}
                 </li>
               </ul>
@@ -280,7 +489,7 @@
           </div>
           <div class="col-lg-6" v-if="otherConstraints.length">
             <section class="card shadow-sm h-100">
-              <div class="card-header bg-white">
+              <div class="card-header">
                 <i class="fal fa-link section-icon text-secondary"></i>
                 <strong>Outras restrições</strong>
               </div>
@@ -446,6 +655,49 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       return isNaN(n) ? null : n;
     }
 
+    function parseKeyColumns(keysStr) {
+      if (!keysStr) return [];
+      return keysStr.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    function buildPrimaryKeyFromSpHelp(result) {
+      const pkConstraint = result.constraints.find(c => /^PRIMARY KEY/i.test(c.type));
+      if (pkConstraint) {
+        return {
+          enabled: true,
+          name: pkConstraint.name,
+          columns: parseKeyColumns(pkConstraint.keys),
+          clustered: /clustered/i.test(pkConstraint.type) && !/nonclustered/i.test(pkConstraint.type)
+        };
+      }
+      const pkIndex = result.indexes.find(ix => /primary key/i.test(ix.index_description || ''));
+      if (pkIndex) {
+        return {
+          enabled: true,
+          name: pkIndex.index_name,
+          columns: parseKeyColumns(pkIndex.index_keys),
+          clustered: /clustered/i.test(pkIndex.index_description) && !/nonclustered/i.test(pkIndex.index_description)
+        };
+      }
+      return { enabled: false, name: '', columns: [], clustered: true };
+    }
+
+    function snapshotPrimaryKey(pk) {
+      return JSON.parse(JSON.stringify({
+        enabled: !!pk.enabled,
+        name: pk.name || '',
+        columns: [...(pk.columns || [])],
+        clustered: pk.clustered !== false
+      }));
+    }
+
+    function primaryKeyEqual(a, b) {
+      return !!a.enabled === !!b.enabled &&
+        (a.name || '') === (b.name || '') &&
+        a.clustered === b.clustered &&
+        (a.columns || []).join('|') === (b.columns || []).join('|');
+    }
+
     function parseSpHelp(text) {
       const lines = text.split(/\r?\n/);
       const result = {
@@ -530,6 +782,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             identityIncrement: null,
             defaultValue: '',
             defaultConstraintName: '',
+            hasDefault: false,
             nullReplacement: ''
           };
           col.lengthDisplay = col.length != null ? String(col.length) : '';
@@ -591,6 +844,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
               if (col) {
                 col.defaultValue = keys;
                 col.defaultConstraintName = cname;
+                col.hasDefault = true;
                 col._original = snapshotColumn(col);
               }
             }
@@ -611,6 +865,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         throw new Error('Nenhuma coluna foi identificada no texto.');
       }
 
+      result.primaryKey = buildPrimaryKeyFromSpHelp(result);
       return result;
     }
 
@@ -624,6 +879,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         scale: col.scale,
         nullable: col.nullable,
         isIdentity: col.isIdentity,
+        hasDefault: !!col.hasDefault,
         defaultValue: col.defaultValue,
         defaultConstraintName: col.defaultConstraintName
       }));
@@ -672,6 +928,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         a.scale === b.scale &&
         a.nullable === b.nullable &&
         a.isIdentity === b.isIdentity &&
+        !!a.hasDefault === !!b.hasDefault &&
         (a.defaultValue || '') === (b.defaultValue || '') &&
         (a.defaultConstraintName || '') === (b.defaultConstraintName || '');
     }
@@ -679,6 +936,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
     createApp({
       data() {
         return {
+          theme: localStorage.getItem('sqlhelp-theme') || 'dark',
           rawInput: '',
           parseError: '',
           parsed: false,
@@ -687,9 +945,11 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           columns: [],
           indexes: [],
           constraints: [],
+          primaryKey: { enabled: false, name: '', columns: [], clustered: true, _original: null },
           generatedSql: '',
           scriptWarnings: [],
           toastMessage: '',
+          reseedIdentity: false,
           sqlTypes: [
             'bigint', 'binary', 'bit', 'char', 'date', 'datetime', 'datetime2',
             'datetimeoffset', 'decimal', 'float', 'geography', 'geometry', 'image',
@@ -702,8 +962,25 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       computed: {
         otherConstraints() {
           return this.constraints
-            .filter(c => !/^DEFAULT on column/i.test(c.type))
+            .filter(c => !/^DEFAULT on column/i.test(c.type) && !/^PRIMARY KEY/i.test(c.type))
             .map(c => `${c.type} — ${c.name} (${c.keys})`);
+        },
+        nonPkIndexes() {
+          const pkName = this.primaryKey.enabled ? this.primaryKey.name : '';
+          return this.indexes.filter(ix => {
+            if (pkName && ix.index_name === pkName) return false;
+            if (/primary key/i.test(ix.index_description || '')) return false;
+            return true;
+          });
+        },
+        pkSelectableColumns() {
+          return this.columns.filter(c => !c._deleted);
+        },
+        hasIdentityColumn() {
+          return this.columns.some(c => c.isIdentity && !c._deleted);
+        },
+        identityColumns() {
+          return this.columns.filter(c => c.isIdentity && !c._deleted);
         }
       },
       methods: {
@@ -719,8 +996,11 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             this.columns = data.columns;
             this.indexes = data.indexes;
             this.constraints = data.constraints;
+            this.primaryKey = { ...data.primaryKey, _original: null };
+            this.primaryKey._original = snapshotPrimaryKey(this.primaryKey);
             this.completionTime = data.completionTime;
             this.parsed = true;
+            this.reseedIdentity = false;
             this.generatedSql = '';
             this.scriptWarnings = [];
           } catch (e) {
@@ -729,8 +1009,14 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         },
         reset() {
           this.parsed = false;
+          this.reseedIdentity = false;
           this.generatedSql = '';
           this.scriptWarnings = [];
+        },
+        identityVarType(col) {
+          const t = (col.type || '').toLowerCase();
+          if (['bigint', 'int', 'smallint', 'tinyint', 'decimal', 'numeric'].includes(t)) return t;
+          return 'bigint';
         },
         colNeedsLength(type) {
           return LENGTH_TYPES.includes((type || '').toLowerCase());
@@ -790,10 +1076,20 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             isIdentity: false,
             identitySeed: 1,
             identityIncrement: 1,
+            hasDefault: false,
             defaultValue: '',
             defaultConstraintName: '',
             nullReplacement: ''
           });
+        },
+        toggleDefault(col, checked) {
+          col.hasDefault = checked;
+          if (checked && !col.defaultConstraintName && this.table.name) {
+            const t = (this.table.name || 'TBL').replace(/[^a-zA-Z0-9_]/g, '_');
+            const c = (col.name || 'COL').replace(/[^a-zA-Z0-9_]/g, '_');
+            col.defaultConstraintName = `DF_${t}_${c}`;
+          }
+          this.markModified(col);
         },
         needsNullReplacement(col) {
           if (col._deleted || col.nullable || col._status === 'new') return false;
@@ -814,6 +1110,53 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           const name = (this.table.name || '').trim();
           return `[${schema}].[${name}]`;
         },
+        onPrimaryKeyToggle() {
+          if (this.primaryKey.enabled && !this.primaryKey.name) {
+            const s = (this.table.schema || 'dbo').replace(/[^a-zA-Z0-9_]/g, '_');
+            const t = (this.table.name || 'TBL').replace(/[^a-zA-Z0-9_]/g, '_');
+            this.primaryKey.name = `PK_${s}_${t}`;
+          }
+          if (!this.primaryKey.enabled) {
+            this.primaryKey.columns = [];
+          }
+        },
+        isPkColumnSelected(name) {
+          return this.primaryKey.columns.includes(name);
+        },
+        togglePkColumn(name, checked) {
+          if (checked) {
+            if (!this.primaryKey.columns.includes(name)) {
+              this.primaryKey.columns.push(name);
+            }
+          } else {
+            this.primaryKey.columns = this.primaryKey.columns.filter(c => c !== name);
+          }
+        },
+        movePkColumn(dir) {
+          const cols = this.primaryKey.columns;
+          if (cols.length < 2) return;
+          if (dir === -1) {
+            cols.unshift(cols.pop());
+          } else {
+            cols.push(cols.shift());
+          }
+        },
+        primaryKeyChanged() {
+          const o = this.primaryKey._original;
+          if (!o) return this.primaryKey.enabled;
+          return !primaryKeyEqual(this.primaryKey, o);
+        },
+        needsDropPrimaryKeyFirst() {
+          const o = this.primaryKey._original;
+          if (!o || !o.enabled || !o.name) return false;
+          if (this.primaryKeyChanged()) return true;
+          const deletedPkCol = this.columns.some(c => c._deleted && o.columns.includes(c.name));
+          const renamedPkCol = this.columns.some(c => {
+            const orig = c._original;
+            return orig && c.name !== orig.name && o.columns.includes(orig.name);
+          });
+          return deletedPkCol || renamedPkCol;
+        },
         generateScript() {
           const lines = [];
           const warnings = [];
@@ -830,6 +1173,15 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           lines.push('');
 
           let hasChanges = false;
+          const origPk = this.primaryKey._original;
+
+          if (this.needsDropPrimaryKeyFirst()) {
+            hasChanges = true;
+            lines.push('-- Remover primary key existente');
+            lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${origPk.name}];`);
+            lines.push('GO');
+            lines.push('');
+          }
 
           // Remoções
           for (const col of this.columns.filter(c => c._deleted && c._status !== 'new')) {
@@ -860,8 +1212,11 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
               col.prec !== orig.prec ||
               col.scale !== orig.scale;
             const nullChanged = col.nullable !== orig.nullable;
-            const defChanged = (col.defaultValue || '') !== (orig.defaultValue || '') ||
-              (col.defaultConstraintName || '') !== (orig.defaultConstraintName || '');
+            const defChanged = !!col.hasDefault !== !!orig.hasDefault ||
+              (col.hasDefault && (
+                (col.defaultValue || '') !== (orig.defaultValue || '') ||
+                (col.defaultConstraintName || '') !== (orig.defaultConstraintName || '')
+              ));
 
             const goingNotNull = orig.nullable && !col.nullable;
             if ((typeChanged || nullChanged) && goingNotNull) {
@@ -893,15 +1248,23 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
 
             if (defChanged) {
               hasChanges = true;
-              if (orig.defaultConstraintName) {
+              const hadDefault = !!orig.hasDefault && orig.defaultConstraintName;
+              const wantDefault = !!col.hasDefault && col.defaultValue && col.defaultValue.trim();
+              if (hadDefault && (!wantDefault || orig.defaultConstraintName !== col.defaultConstraintName ||
+                  (orig.defaultValue || '') !== (col.defaultValue || ''))) {
                 lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${orig.defaultConstraintName}];`);
                 lines.push('GO');
               }
-              if (col.defaultValue && col.defaultValue.trim()) {
-                const defName = col.defaultConstraintName ||
+              if (wantDefault) {
+                const defName = (col.defaultConstraintName && col.defaultConstraintName.trim()) ||
                   `DF_${table}_${col.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
-                lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${defName}] DEFAULT ${col.defaultValue.trim()} FOR [${col.name}];`);
-                lines.push('GO');
+                if (!hadDefault || orig.defaultConstraintName !== col.defaultConstraintName ||
+                    (orig.defaultValue || '') !== (col.defaultValue || '')) {
+                  lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${defName}] DEFAULT ${col.defaultValue.trim()} FOR [${col.name}];`);
+                  lines.push('GO');
+                }
+              } else if (col.hasDefault && !(col.defaultValue && col.defaultValue.trim())) {
+                warnings.push(`Coluna [${col.name}]: default marcado sem valor — informe o valor ou desmarque o checkbox.`);
               }
             }
             if (col.isIdentity !== orig.isIdentity ||
@@ -927,13 +1290,60 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             line += ';';
             lines.push(line);
             lines.push('GO');
-            if (col.defaultValue && col.defaultValue.trim()) {
+            if (col.hasDefault && col.defaultValue && col.defaultValue.trim()) {
               const defName = (col.defaultConstraintName && col.defaultConstraintName.trim()) ||
                 `DF_${table}_${col.name}`.replace(/[^a-zA-Z0-9_]/g, '_');
               lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${defName}] DEFAULT ${col.defaultValue.trim()} FOR [${col.name}];`);
               lines.push('GO');
             }
             lines.push('');
+          }
+
+          if (this.primaryKey.enabled && (this.primaryKeyChanged() || this.needsDropPrimaryKeyFirst())) {
+            const validCols = this.primaryKey.columns.filter(cn => {
+              const col = this.columns.find(c => c.name === cn && !c._deleted);
+              return !!col;
+            });
+            const invalid = this.primaryKey.columns.filter(cn => !validCols.includes(cn));
+            if (invalid.length) {
+              warnings.push(`PK: colunas inválidas ou removidas (${invalid.join(', ')}). Atualize a seleção.`);
+            }
+            if (validCols.length) {
+              hasChanges = true;
+              const pkType = this.primaryKey.clustered ? 'CLUSTERED' : 'NONCLUSTERED';
+              const colsSql = validCols.map(c => `[${c}]`).join(', ');
+              const pkName = (this.primaryKey.name && this.primaryKey.name.trim()) ||
+                `PK_${schema}_${table}`.replace(/[^a-zA-Z0-9_]/g, '_');
+              lines.push('-- Primary Key');
+              lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${pkName}] PRIMARY KEY ${pkType} (${colsSql});`);
+              lines.push('GO');
+              lines.push('');
+            } else if (this.primaryKey.enabled) {
+              warnings.push('Primary Key ativa sem colunas válidas selecionadas.');
+            }
+          } else if (!this.primaryKey.enabled && origPk && origPk.enabled && this.primaryKeyChanged()) {
+            hasChanges = true;
+          }
+
+          if (this.reseedIdentity) {
+            const identityCols = this.identityColumns;
+            if (!identityCols.length) {
+              warnings.push('Reseed identity marcado, mas não há coluna identity na tabela.');
+            } else {
+              hasChanges = true;
+              const fullTable = `${schema}.${table}`;
+              lines.push('');
+              lines.push('-- Reseed identity: próximo INSERT = MAX(coluna) + increment');
+              for (const col of identityCols) {
+                const varName = '@max_' + col.name.replace(/[^a-zA-Z0-9_]/g, '_');
+                const sqlType = this.identityVarType(col);
+                lines.push(`DECLARE ${varName} ${sqlType};`);
+                lines.push(`SELECT ${varName} = ISNULL(MAX([${col.name}]), 0) FROM ${qTable};`);
+                lines.push(`DBCC CHECKIDENT ('${fullTable}', RESEED, ${varName});`);
+                lines.push('GO');
+                lines.push('');
+              }
+            }
           }
 
           if (!hasChanges) {
@@ -960,8 +1370,19 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             const t = bootstrap.Toast.getOrCreateInstance(el);
             t.show();
           }
+        },
+        applyTheme(theme) {
+          document.documentElement.setAttribute('data-theme', theme);
+        },
+        toggleTheme() {
+          this.theme = this.theme === 'dark' ? 'light' : 'dark';
+          this.applyTheme(this.theme);
+          localStorage.setItem('sqlhelp-theme', this.theme);
         }
       },
+      mounted() {
+        this.applyTheme(this.theme);
+      }
     }).mount('#app');
   </script>
 </body>
