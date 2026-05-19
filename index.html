@@ -33,6 +33,7 @@
       --theme-toggle-bg: rgba(255, 255, 255, 0.12);
       --theme-toggle-border: rgba(255, 255, 255, 0.35);
       --theme-toggle-color: #fff;
+      --placeholder-color: #6c757d;
     }
 
     [data-theme="dark"] {
@@ -54,6 +55,7 @@
       --theme-toggle-bg: rgba(255, 255, 255, 0.08);
       --theme-toggle-border: rgba(255, 255, 255, 0.25);
       --theme-toggle-color: #e8eaed;
+      --placeholder-color: #9aa3b2;
     }
 
     body {
@@ -136,6 +138,49 @@
       color: var(--text-muted);
     }
 
+    .form-control::placeholder,
+    textarea.form-control::placeholder {
+      color: var(--placeholder-color);
+      opacity: 1;
+    }
+
+    .form-control::-webkit-input-placeholder {
+      color: var(--placeholder-color);
+      opacity: 1;
+    }
+
+    .form-control::-moz-placeholder {
+      color: var(--placeholder-color);
+      opacity: 1;
+    }
+
+    .form-control:-ms-input-placeholder {
+      color: var(--placeholder-color);
+      opacity: 1;
+    }
+
+    .form-control:disabled::placeholder,
+    .form-control[readonly]::placeholder {
+      color: var(--placeholder-color);
+      opacity: 0.7;
+    }
+
+    [data-theme="dark"] .form-control:not(:disabled):not([readonly]) {
+      background-color: var(--bg-input);
+      border-color: var(--border);
+    }
+
+    [data-theme="dark"] .form-control:not(:disabled):not([readonly])::placeholder {
+      color: var(--placeholder-color) !important;
+      opacity: 1 !important;
+    }
+
+    [data-theme="dark"] input,
+    [data-theme="dark"] textarea,
+    [data-theme="dark"] select {
+      color-scheme: dark;
+    }
+
     .text-muted { color: var(--text-muted) !important; }
     .list-group-item {
       background: var(--bg-card);
@@ -175,6 +220,20 @@
 
     .badge-changed { font-size: 0.7rem; }
     .section-icon { width: 1.25rem; text-align: center; }
+
+    .pk-sortable-list { max-width: 32rem; }
+    .pk-sortable-item {
+      cursor: grab;
+      user-select: none;
+      background: var(--bg-card-header);
+      border-color: var(--border) !important;
+    }
+    .pk-sortable-item:active { cursor: grabbing; }
+    .pk-sortable-item.pk-drag-over {
+      outline: 2px dashed var(--sqlhelp-accent, #0d6efd);
+      outline-offset: 2px;
+    }
+    .pk-grip { color: var(--text-muted); width: 1rem; text-align: center; }
 
     [data-theme="dark"] .alert-warning {
       background-color: #3d3216;
@@ -236,6 +295,13 @@
 
       <!-- Editor -->
       <template v-if="parsed">
+        <div v-if="pkMissing" class="alert alert-warning d-flex align-items-start gap-2 mb-3 shadow-sm" role="alert">
+          <i class="fal fa-exclamation-triangle fa-lg mt-1"></i>
+          <div>
+            <strong>Primary key não definida</strong>
+            <p class="mb-0 small">Configure a PK na seção abaixo ou confirme que a tabela não possui chave primária.</p>
+          </div>
+        </div>
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
           <button type="button" class="btn btn-outline-secondary btn-sm" @click="reset">
             <i class="fal fa-arrow-left me-1"></i> Voltar e colar outro
@@ -366,11 +432,25 @@
                              :disabled="col._deleted || col.isIdentity"
                              @change="col.nullable = $event.target.checked; markModified(col)">
                     </td>
-                    <td class="text-center">
-                      <input type="checkbox" class="form-check-input"
-                             :checked="col.isIdentity"
-                             :disabled="col._deleted"
-                             @change="toggleIdentity(col, $event.target.checked)">
+                    <td>
+                      <div class="d-flex flex-column align-items-center gap-1">
+                        <input type="checkbox" class="form-check-input"
+                               :checked="col.isIdentity"
+                               :disabled="col._deleted || isIdentityBlocked(col)"
+                               :title="isIdentityBlocked(col) ? 'Já existe outra coluna identity na tabela' : ''"
+                               @change="toggleIdentity(col, $event.target.checked)">
+                        <template v-if="col.isIdentity && !col._deleted">
+                          <div class="d-flex gap-1 align-items-center">
+                            <input type="number" class="form-control form-control-sm mono" style="width:3.2rem"
+                                   v-model.number="col.identitySeed" min="0" title="Seed"
+                                   @input="markModified(col)">
+                            <span class="small text-muted">,</span>
+                            <input type="number" class="form-control form-control-sm mono" style="width:3.2rem"
+                                   v-model.number="col.identityIncrement" min="1" title="Increment"
+                                   @input="markModified(col)">
+                          </div>
+                        </template>
+                      </div>
                     </td>
                     <td>
                       <div class="d-flex flex-column gap-1">
@@ -414,19 +494,24 @@
             </div>
             <p class="small text-muted px-3 py-2 mb-0">
               <i class="fal fa-info-circle me-1"></i>
-              FK e índices não-PK exigem revisão manual no script gerado.
+              Apenas <strong>uma</strong> coluna pode ser IDENTITY por tabela. FK e índices não-PK exigem revisão manual.
               Ao mudar <strong>NULL → NOT NULL</strong>, preencha <strong>Subst. NULL</strong> para gerar o <code>UPDATE</code> antes do <code>ALTER COLUMN</code>.
             </p>
           </div>
         </section>
 
         <!-- Primary Key -->
-        <section class="card shadow-sm mb-4">
-          <div class="card-header d-flex align-items-center gap-2">
+        <section class="card shadow-sm mb-4" :class="{ 'border border-warning': pkMissing }">
+          <div class="card-header d-flex align-items-center gap-2" :class="{ 'bg-warning bg-opacity-25': pkMissing }">
             <i class="fal fa-key section-icon text-warning"></i>
             <strong>Primary Key</strong>
+            <span v-if="pkMissing" class="badge bg-warning text-dark">Ausente</span>
           </div>
           <div class="card-body">
+            <div v-if="pkMissing" class="alert alert-warning py-2 small mb-3">
+              <i class="fal fa-exclamation-circle me-1"></i>
+              Nenhuma primary key definida. Ative o checkbox e selecione as colunas da chave.
+            </div>
             <div class="form-check mb-3">
               <input type="checkbox" class="form-check-input" id="pkEnabled" v-model="primaryKey.enabled"
                      @change="onPrimaryKeyToggle">
@@ -437,7 +522,7 @@
                 <div class="col-md-6">
                   <label class="form-label small text-muted">Nome da constraint</label>
                   <input type="text" class="form-control form-control-sm mono"
-                         v-model="primaryKey.name" placeholder="ex: PK_dbo_ANO"
+                         v-model="primaryKey.name" placeholder="ex: PK_dbo_ANO">
                 </div>
                 <div class="col-md-6 d-flex align-items-end">
                   <div class="form-check mb-2">
@@ -447,8 +532,8 @@
                   </div>
                 </div>
               </div>
-              <label class="form-label small text-muted mb-2">Colunas da chave (ordem de seleção)</label>
-              <div class="d-flex flex-wrap gap-2 mb-2">
+              <label class="form-label small text-muted mb-2">Adicionar colunas à chave</label>
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 <label v-for="col in pkSelectableColumns" :key="col._id"
                        class="btn btn-sm"
                        :class="isPkColumnSelected(col.name) ? 'btn-warning' : 'btn-outline-secondary'">
@@ -458,13 +543,30 @@
                   <span class="mono">{{ col.name }}</span>
                 </label>
               </div>
-              <p v-if="primaryKey.columns.length" class="small mono mb-0 text-muted">
-                Ordem: {{ primaryKey.columns.join(', ') }}
-                <button type="button" class="btn btn-link btn-sm p-0 ms-2" v-if="primaryKey.columns.length > 1"
-                        @click="movePkColumn(-1)">↑ subir última</button>
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1" v-if="primaryKey.columns.length > 1"
-                        @click="movePkColumn(1)">↓ descer primeira</button>
-              </p>
+              <label class="form-label small text-muted mb-2">Ordem da chave (arraste para reordenar)</label>
+              <ul v-if="primaryKey.columns.length" class="list-group list-group-flush pk-sortable-list mb-0">
+                <li v-for="(item, idx) in primaryKey.columns" :key="item.name"
+                    class="list-group-item pk-sortable-item d-flex align-items-center gap-2 py-2"
+                    :class="{ 'pk-drag-over': pkDragOverIndex === idx }"
+                    draggable="true"
+                    @dragstart="pkDragStart(idx, $event)"
+                    @dragend="pkDragEnd"
+                    @dragover.prevent="pkDragOverIndex = idx"
+                    @dragleave="pkDragLeave(idx)"
+                    @drop.prevent="pkDrop(idx)">
+                  <i class="fal fa-grip-vertical pk-grip"></i>
+                  <span class="mono flex-grow-1">{{ item.name }}</span>
+                  <select class="form-select form-select-sm mono" style="width:5.5rem"
+                          v-model="item.direction">
+                    <option value="ASC">ASC</option>
+                    <option value="DESC">DESC</option>
+                  </select>
+                  <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                          title="Remover da PK" @click="togglePkColumn(item.name, false)">
+                    <i class="fal fa-times"></i>
+                  </button>
+                </li>
+              </ul>
               <p v-else class="small text-warning mb-0">
                 <i class="fal fa-exclamation-triangle me-1"></i> Selecione ao menos uma coluna.
               </p>
@@ -655,9 +757,33 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       return isNaN(n) ? null : n;
     }
 
-    function parseKeyColumns(keysStr) {
+    function parsePkKeyItems(keysStr) {
       if (!keysStr) return [];
-      return keysStr.split(',').map(s => s.trim()).filter(Boolean);
+      return keysStr.split(',').map(part => {
+        const p = part.trim();
+        if (!p) return null;
+        const m = /^(.+?)\s+(ASC|DESC)$/i.exec(p);
+        if (m) return { name: m[1].trim(), direction: m[2].toUpperCase() };
+        return { name: p, direction: 'ASC' };
+      }).filter(Boolean);
+    }
+
+    function normalizePkColumns(columns) {
+      if (!columns || !columns.length) return [];
+      return columns.map(c => {
+        if (typeof c === 'string') return { name: c, direction: 'ASC' };
+        return { name: c.name, direction: (c.direction || 'ASC').toUpperCase() };
+      });
+    }
+
+    function serializePkColumns(columns) {
+      return normalizePkColumns(columns)
+        .map(c => `${c.name}:${c.direction}`)
+        .join('|');
+    }
+
+    function pkColumnNames(columns) {
+      return normalizePkColumns(columns).map(c => c.name);
     }
 
     function buildPrimaryKeyFromSpHelp(result) {
@@ -666,7 +792,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         return {
           enabled: true,
           name: pkConstraint.name,
-          columns: parseKeyColumns(pkConstraint.keys),
+          columns: parsePkKeyItems(pkConstraint.keys),
           clustered: /clustered/i.test(pkConstraint.type) && !/nonclustered/i.test(pkConstraint.type)
         };
       }
@@ -675,7 +801,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         return {
           enabled: true,
           name: pkIndex.index_name,
-          columns: parseKeyColumns(pkIndex.index_keys),
+          columns: parsePkKeyItems(pkIndex.index_keys),
           clustered: /clustered/i.test(pkIndex.index_description) && !/nonclustered/i.test(pkIndex.index_description)
         };
       }
@@ -686,7 +812,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       return JSON.parse(JSON.stringify({
         enabled: !!pk.enabled,
         name: pk.name || '',
-        columns: [...(pk.columns || [])],
+        columns: normalizePkColumns(pk.columns),
         clustered: pk.clustered !== false
       }));
     }
@@ -695,7 +821,75 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       return !!a.enabled === !!b.enabled &&
         (a.name || '') === (b.name || '') &&
         a.clustered === b.clustered &&
-        (a.columns || []).join('|') === (b.columns || []).join('|');
+        serializePkColumns(a.columns) === serializePkColumns(b.columns);
+    }
+
+    function identityTempColumnName(colName) {
+      return ('_' + colName + '_id_new').replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    function hasExecutableSqlLines(lines) {
+      return lines.some(line => {
+        const t = line.trim();
+        return t && t !== 'GO' && !t.startsWith('--');
+      });
+    }
+
+    function wrapScriptWithTransaction(rawLines, qTable) {
+      const headerComments = [];
+      const statements = [];
+
+      for (const line of rawLines) {
+        const t = line.trim();
+        if (t === 'GO') continue;
+        if (!t) continue;
+        if (t.startsWith('--')) {
+          headerComments.push(line);
+          continue;
+        }
+        if (/^SET NOCOUNT ON/i.test(t)) continue;
+        statements.push(t.endsWith(';') ? t : t + ';');
+      }
+
+      const out = [...headerComments];
+      out.push('');
+      out.push('-- Transação: em caso de erro, ROLLBACK automático');
+      out.push('SET NOCOUNT ON;');
+      out.push('SET XACT_ABORT ON;');
+      out.push('GO');
+      out.push('');
+      out.push('BEGIN TRANSACTION;');
+      out.push('GO');
+      out.push('');
+      out.push('BEGIN TRY');
+      out.push('');
+      statements.forEach(stmt => out.push(stmt));
+      out.push('');
+      out.push('COMMIT TRANSACTION;');
+      out.push(`PRINT N'SqlHelp: script executado com sucesso em ${qTable}.';`);
+      out.push('END TRY');
+      out.push('BEGIN CATCH');
+      out.push('  IF @@TRANCOUNT > 0');
+      out.push('    ROLLBACK TRANSACTION;');
+      out.push('');
+      out.push('  DECLARE @SqlHelpErrMsg NVARCHAR(4000) = ERROR_MESSAGE();');
+      out.push('  DECLARE @SqlHelpErrSev INT = ERROR_SEVERITY();');
+      out.push('  DECLARE @SqlHelpErrState INT = ERROR_STATE();');
+      out.push('  DECLARE @SqlHelpErrLine INT = ERROR_LINE();');
+      out.push('  DECLARE @SqlHelpErrProc NVARCHAR(256) = ISNULL(ERROR_PROCEDURE(), N''-'');');
+      out.push('');
+      out.push('  PRINT N'''';');
+      out.push('  PRINT N''================================================'';');
+      out.push('  PRINT N''SqlHelp: ERRO — alterações revertidas (ROLLBACK)'';');
+      out.push('  PRINT N''================================================'';');
+      out.push('  PRINT N''Mensagem: '' + @SqlHelpErrMsg;');
+      out.push('  PRINT N''Linha: '' + CAST(@SqlHelpErrLine AS NVARCHAR(20));');
+      out.push('  PRINT N''Procedure: '' + @SqlHelpErrProc;');
+      out.push('');
+      out.push('  RAISERROR(@SqlHelpErrMsg, @SqlHelpErrSev, @SqlHelpErrState);');
+      out.push('END CATCH');
+      out.push('GO');
+      return out.join('\n');
     }
 
     function parseSpHelp(text) {
@@ -879,6 +1073,8 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         scale: col.scale,
         nullable: col.nullable,
         isIdentity: col.isIdentity,
+        identitySeed: col.identitySeed,
+        identityIncrement: col.identityIncrement,
         hasDefault: !!col.hasDefault,
         defaultValue: col.defaultValue,
         defaultConstraintName: col.defaultConstraintName
@@ -928,6 +1124,8 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         a.scale === b.scale &&
         a.nullable === b.nullable &&
         a.isIdentity === b.isIdentity &&
+        a.identitySeed === b.identitySeed &&
+        a.identityIncrement === b.identityIncrement &&
         !!a.hasDefault === !!b.hasDefault &&
         (a.defaultValue || '') === (b.defaultValue || '') &&
         (a.defaultConstraintName || '') === (b.defaultConstraintName || '');
@@ -950,6 +1148,8 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           scriptWarnings: [],
           toastMessage: '',
           reseedIdentity: false,
+          pkDragIndex: null,
+          pkDragOverIndex: null,
           sqlTypes: [
             'bigint', 'binary', 'bit', 'char', 'date', 'datetime', 'datetime2',
             'datetimeoffset', 'decimal', 'float', 'geography', 'geometry', 'image',
@@ -981,6 +1181,10 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         },
         identityColumns() {
           return this.columns.filter(c => c.isIdentity && !c._deleted);
+        },
+        pkMissing() {
+          if (!this.primaryKey.enabled) return true;
+          return normalizePkColumns(this.primaryKey.columns).length === 0;
         }
       },
       methods: {
@@ -997,6 +1201,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             this.indexes = data.indexes;
             this.constraints = data.constraints;
             this.primaryKey = { ...data.primaryKey, _original: null };
+            this.primaryKey.columns = normalizePkColumns(this.primaryKey.columns);
             this.primaryKey._original = snapshotPrimaryKey(this.primaryKey);
             this.completionTime = data.completionTime;
             this.parsed = true;
@@ -1049,12 +1254,24 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             col._status = 'unchanged';
           }
         },
+        isIdentityBlocked(col) {
+          const holder = this.columns.find(c => c.isIdentity && !c._deleted);
+          return !!(holder && holder._id !== col._id);
+        },
         toggleIdentity(col, checked) {
-          col.isIdentity = checked;
           if (checked) {
+            this.columns.forEach(c => {
+              if (c._id !== col._id && c.isIdentity) {
+                c.isIdentity = false;
+                this.markModified(c);
+              }
+            });
+            col.isIdentity = true;
             col.nullable = false;
-            col.identitySeed = col.identitySeed || 1;
+            col.identitySeed = col.identitySeed ?? 1;
             col.identityIncrement = col.identityIncrement || 1;
+          } else {
+            col.isIdentity = false;
           }
           this.markModified(col);
         },
@@ -1121,25 +1338,136 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           }
         },
         isPkColumnSelected(name) {
-          return this.primaryKey.columns.includes(name);
+          return this.primaryKey.columns.some(c => c.name === name);
         },
         togglePkColumn(name, checked) {
           if (checked) {
-            if (!this.primaryKey.columns.includes(name)) {
-              this.primaryKey.columns.push(name);
+            if (!this.isPkColumnSelected(name)) {
+              this.primaryKey.columns.push({ name, direction: 'ASC' });
             }
           } else {
-            this.primaryKey.columns = this.primaryKey.columns.filter(c => c !== name);
+            this.primaryKey.columns = this.primaryKey.columns.filter(c => c.name !== name);
           }
         },
-        movePkColumn(dir) {
-          const cols = this.primaryKey.columns;
-          if (cols.length < 2) return;
-          if (dir === -1) {
-            cols.unshift(cols.pop());
-          } else {
-            cols.push(cols.shift());
+        pkDragStart(idx, ev) {
+          this.pkDragIndex = idx;
+          if (ev && ev.dataTransfer) {
+            ev.dataTransfer.effectAllowed = 'move';
+            ev.dataTransfer.setData('text/plain', String(idx));
           }
+        },
+        pkDragEnd() {
+          this.pkDragIndex = null;
+          this.pkDragOverIndex = null;
+        },
+        pkDragLeave(idx) {
+          if (this.pkDragOverIndex === idx) this.pkDragOverIndex = null;
+        },
+        pkDrop(dropIdx) {
+          const from = this.pkDragIndex;
+          if (from === null || from === dropIdx) {
+            this.pkDragEnd();
+            return;
+          }
+          const cols = [...this.primaryKey.columns];
+          const [item] = cols.splice(from, 1);
+          cols.splice(dropIdx, 0, item);
+          this.primaryKey.columns = cols;
+          this.pkDragEnd();
+        },
+        getPkConstraintNameForDrop() {
+          if (this.primaryKey.enabled && this.primaryKey.name) {
+            return this.primaryKey.name.trim();
+          }
+          const o = this.primaryKey._original;
+          if (o && o.enabled && o.name) return o.name.trim();
+          return '';
+        },
+        isColumnInPk(colName) {
+          if (this.primaryKey.enabled) {
+            if (normalizePkColumns(this.primaryKey.columns).some(c => c.name === colName)) return true;
+          }
+          const o = this.primaryKey._original;
+          if (o && o.enabled && pkColumnNames(o.columns).includes(colName)) return true;
+          return false;
+        },
+        appendDropPkConstraint(lines, qTable, colName, pkAlreadyDropped) {
+          if (pkAlreadyDropped) return false;
+          if (!this.isColumnInPk(colName)) return false;
+          const pkName = this.getPkConstraintNameForDrop();
+          if (!pkName) return false;
+          lines.push(`-- Remover PK (coluna [${colName}] faz parte da chave)`);
+          lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${pkName}];`);
+          lines.push('GO');
+          return true;
+        },
+        appendAddPkConstraint(lines, qTable, schema, table) {
+          if (!this.primaryKey.enabled) return false;
+          const validCols = normalizePkColumns(this.primaryKey.columns).filter(item => {
+            return this.columns.some(c => c.name === item.name && !c._deleted);
+          });
+          if (!validCols.length) return false;
+          const pkType = this.primaryKey.clustered ? 'CLUSTERED' : 'NONCLUSTERED';
+          const colsSql = validCols.map(c => `[${c.name}] ${c.direction || 'ASC'}`).join(', ');
+          const pkName = (this.primaryKey.name && this.primaryKey.name.trim()) ||
+            `PK_${schema}_${table}`.replace(/[^a-zA-Z0-9_]/g, '_');
+          lines.push('-- Recriar Primary Key');
+          lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${pkName}] PRIMARY KEY ${pkType} (${colsSql});`);
+          lines.push('GO');
+          return true;
+        },
+        appendAddIdentityScript(lines, col, qTable, schema, table, pkAlreadyDropped) {
+          const seed = col.identitySeed ?? 1;
+          const inc = col.identityIncrement || 1;
+          const tmp = identityTempColumnName(col.name);
+          const typeSql = buildTypeSql(col);
+          let pkDropped = this.appendDropPkConstraint(lines, qTable, col.name, pkAlreadyDropped);
+
+          lines.push(`-- Adicionar IDENTITY em [${col.name}] (recria a coluna)`);
+          if (col.hasDefault && col.defaultConstraintName) {
+            lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${col.defaultConstraintName}];`);
+            lines.push('GO');
+          }
+          lines.push(`ALTER TABLE ${qTable} ADD [${tmp}] ${typeSql} IDENTITY(${seed}, ${inc}) NOT NULL;`);
+          lines.push('GO');
+          lines.push(`SET IDENTITY_INSERT ${qTable} ON;`);
+          lines.push(`UPDATE ${qTable} SET [${tmp}] = [${col.name}];`);
+          lines.push('GO');
+          lines.push(`SET IDENTITY_INSERT ${qTable} OFF;`);
+          lines.push('GO');
+          lines.push(`ALTER TABLE ${qTable} DROP COLUMN [${col.name}];`);
+          lines.push('GO');
+          lines.push(`EXEC sp_rename N'${schema}.${table}.${tmp}', N'${col.name}', 'COLUMN';`);
+          lines.push('GO');
+
+          let pkRecreated = false;
+          if (pkDropped || pkAlreadyDropped) {
+            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table);
+          }
+          lines.push('');
+          return pkRecreated;
+        },
+        appendRemoveIdentityScript(lines, col, qTable, schema, table, pkAlreadyDropped) {
+          const tmp = identityTempColumnName(col.name);
+          const typeSql = buildTypeSql(col);
+          let pkDropped = this.appendDropPkConstraint(lines, qTable, col.name, pkAlreadyDropped);
+
+          lines.push(`-- Remover IDENTITY de [${col.name}] (recria sem identity)`);
+          lines.push(`ALTER TABLE ${qTable} ADD [${tmp}] ${typeSql} NOT NULL;`);
+          lines.push('GO');
+          lines.push(`UPDATE ${qTable} SET [${tmp}] = [${col.name}];`);
+          lines.push('GO');
+          lines.push(`ALTER TABLE ${qTable} DROP COLUMN [${col.name}];`);
+          lines.push('GO');
+          lines.push(`EXEC sp_rename N'${schema}.${table}.${tmp}', N'${col.name}', 'COLUMN';`);
+          lines.push('GO');
+
+          let pkRecreated = false;
+          if (pkDropped || pkAlreadyDropped) {
+            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table);
+          }
+          lines.push('');
+          return pkRecreated;
         },
         primaryKeyChanged() {
           const o = this.primaryKey._original;
@@ -1150,10 +1478,11 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           const o = this.primaryKey._original;
           if (!o || !o.enabled || !o.name) return false;
           if (this.primaryKeyChanged()) return true;
-          const deletedPkCol = this.columns.some(c => c._deleted && o.columns.includes(c.name));
+          const origPkNames = pkColumnNames(o.columns);
+          const deletedPkCol = this.columns.some(c => c._deleted && origPkNames.includes(c.name));
           const renamedPkCol = this.columns.some(c => {
             const orig = c._original;
-            return orig && c.name !== orig.name && o.columns.includes(orig.name);
+            return orig && c.name !== orig.name && origPkNames.includes(orig.name);
           });
           return deletedPkCol || renamedPkCol;
         },
@@ -1168,12 +1497,16 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           lines.push(`-- Tabela: ${qTable}`);
           lines.push(`-- Data: ${new Date().toISOString()}`);
           lines.push('');
-          lines.push('SET NOCOUNT ON;');
-          lines.push('GO');
-          lines.push('');
 
           let hasChanges = false;
           const origPk = this.primaryKey._original;
+          const allIdentityCols = this.columns.filter(c => c.isIdentity && !c._deleted);
+          if (allIdentityCols.length > 1) {
+            warnings.push('SQL Server permite apenas uma coluna IDENTITY por tabela. Desmarque as demais.');
+          }
+
+          let pkDroppedEarly = false;
+          let pkRecreatedInline = false;
 
           if (this.needsDropPrimaryKeyFirst()) {
             hasChanges = true;
@@ -1181,6 +1514,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${origPk.name}];`);
             lines.push('GO');
             lines.push('');
+            pkDroppedEarly = true;
           }
 
           // Remoções
@@ -1232,18 +1566,35 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
               }
             }
 
-            if (typeChanged || nullChanged) {
+            const identityToggled = col.isIdentity !== orig.isIdentity;
+            const identityPropsChanged = col.isIdentity && orig.isIdentity &&
+              (col.identitySeed !== orig.identitySeed || col.identityIncrement !== orig.identityIncrement);
+
+            if (identityToggled && !col._deleted && allIdentityCols.length <= 1) {
+              hasChanges = true;
+              if (col.isIdentity && !orig.isIdentity) {
+                if (this.appendAddIdentityScript(lines, col, qTable, schema, table, pkDroppedEarly)) {
+                  pkRecreatedInline = true;
+                }
+                warnings.push(`Identity em [${col.name}]: coluna recriada — PK/FK recriadas se necessário.`);
+              } else if (!col.isIdentity && orig.isIdentity) {
+                if (this.appendRemoveIdentityScript(lines, col, qTable, schema, table, pkDroppedEarly)) {
+                  pkRecreatedInline = true;
+                }
+                warnings.push(`Identity removida de [${col.name}]: coluna recriada sem identity.`);
+              }
+            } else if (identityToggled && allIdentityCols.length > 1) {
+              warnings.push(`Identity em [${col.name}]: ignorada — já existe outra coluna identity.`);
+            } else if (identityPropsChanged) {
+              warnings.push(`Alterar seed/increment de identity em [${col.name}] exige recriação manual da coluna.`);
+            }
+
+            if ((typeChanged || nullChanged) && !identityToggled) {
               hasChanges = true;
               const typeSql = buildTypeSql(col);
               const nullSql = col.nullable ? 'NULL' : 'NOT NULL';
               lines.push(`ALTER TABLE ${qTable} ALTER COLUMN [${col.name}] ${typeSql} ${nullSql};`);
               lines.push('GO');
-              if (col.isIdentity && !orig.isIdentity) {
-                warnings.push(`Identity em [${col.name}]: ALTER COLUMN não cria identity. Use criação de coluna nova ou recriação da tabela.`);
-              }
-              if (orig.isIdentity && !col.isIdentity) {
-                warnings.push(`Remover identity de [${col.name}] exige script adicional (não gerado automaticamente).`);
-              }
             }
 
             if (defChanged) {
@@ -1267,13 +1618,6 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
                 warnings.push(`Coluna [${col.name}]: default marcado sem valor — informe o valor ou desmarque o checkbox.`);
               }
             }
-            if (col.isIdentity !== orig.isIdentity ||
-              col.identitySeed !== orig.identitySeed ||
-              col.identityIncrement !== orig.identityIncrement) {
-              if (col.isIdentity !== orig.isIdentity) {
-                warnings.push('Alterações de IDENTITY não são aplicadas automaticamente neste script.');
-              }
-            }
             lines.push('');
           }
 
@@ -1283,9 +1627,11 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             const typeSql = buildTypeSql(col);
             const nullSql = col.nullable ? 'NULL' : 'NOT NULL';
             let line = `ALTER TABLE ${qTable} ADD [${col.name}] ${typeSql} ${nullSql}`;
-            if (col.isIdentity) {
-              line += ` IDENTITY(${col.identitySeed || 1}, ${col.identityIncrement || 1})`;
+            if (col.isIdentity && allIdentityCols.length <= 1) {
+              line += ` IDENTITY(${col.identitySeed ?? 1}, ${col.identityIncrement || 1})`;
               warnings.push(`Nova coluna identity [${col.name}]: só é permitida em tabela vazia ou com cuidado extra.`);
+            } else if (col.isIdentity) {
+              warnings.push(`Nova coluna [${col.name}]: identity não aplicada — já existe outra coluna identity.`);
             }
             line += ';';
             lines.push(line);
@@ -1299,24 +1645,19 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             lines.push('');
           }
 
-          if (this.primaryKey.enabled && (this.primaryKeyChanged() || this.needsDropPrimaryKeyFirst())) {
-            const validCols = this.primaryKey.columns.filter(cn => {
-              const col = this.columns.find(c => c.name === cn && !c._deleted);
+          if (this.primaryKey.enabled && (this.primaryKeyChanged() || this.needsDropPrimaryKeyFirst()) && !pkRecreatedInline) {
+            const pkCols = normalizePkColumns(this.primaryKey.columns);
+            const validCols = pkCols.filter(item => {
+              const col = this.columns.find(c => c.name === item.name && !c._deleted);
               return !!col;
             });
-            const invalid = this.primaryKey.columns.filter(cn => !validCols.includes(cn));
+            const invalid = pkCols.filter(item => !validCols.some(v => v.name === item.name));
             if (invalid.length) {
-              warnings.push(`PK: colunas inválidas ou removidas (${invalid.join(', ')}). Atualize a seleção.`);
+              warnings.push(`PK: colunas inválidas ou removidas (${invalid.map(i => i.name).join(', ')}). Atualize a seleção.`);
             }
             if (validCols.length) {
               hasChanges = true;
-              const pkType = this.primaryKey.clustered ? 'CLUSTERED' : 'NONCLUSTERED';
-              const colsSql = validCols.map(c => `[${c}]`).join(', ');
-              const pkName = (this.primaryKey.name && this.primaryKey.name.trim()) ||
-                `PK_${schema}_${table}`.replace(/[^a-zA-Z0-9_]/g, '_');
-              lines.push('-- Primary Key');
-              lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${pkName}] PRIMARY KEY ${pkType} (${colsSql});`);
-              lines.push('GO');
+              this.appendAddPkConstraint(lines, qTable, schema, table);
               lines.push('');
             } else if (this.primaryKey.enabled) {
               warnings.push('Primary Key ativa sem colunas válidas selecionadas.');
@@ -1348,11 +1689,14 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
 
           if (!hasChanges) {
             lines.push('-- Nenhuma alteração detectada em relação ao sp_help original.');
+            this.generatedSql = lines.join('\n');
           } else {
             lines.push('-- Revise o script antes de executar em produção.');
+            this.generatedSql = hasExecutableSqlLines(lines)
+              ? wrapScriptWithTransaction(lines, qTable)
+              : lines.join('\n');
           }
 
-          this.generatedSql = lines.join('\n');
           this.scriptWarnings = warnings;
         },
         copyScript() {
