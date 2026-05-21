@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SqlHelp — Editor de colunas (sp_help)</title>
+  <title>SqlHelp — Estatísticas IO/Time e sp_help</title>
   <script>
     (function () {
       var t = localStorage.getItem('sqlhelp-theme') || 'dark';
@@ -240,30 +240,262 @@
       border-color: #5c4a1a;
       color: #f5e6b8;
     }
+
+    [v-cloak] { display: none !important; }
+
+    .stats-kpi {
+      background: var(--bg-card-header);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      height: 100%;
+    }
+    .stats-kpi-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .stats-kpi-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .stats-bar-track {
+      height: 0.55rem;
+      background: var(--bg-table-head);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .stats-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.35s ease;
+    }
+    .stats-bar-io { background: linear-gradient(90deg, #0d6efd, #5a9fd4); }
+    .stats-bar-phys { background: linear-gradient(90deg, #fd7e14, #ffb347); }
+    .stats-bar-cpu { background: linear-gradient(90deg, #6f42c1, #a98eda); }
+    .stats-bar-elapsed { background: linear-gradient(90deg, #dc3545, #f08080); }
+    .stats-hot-row { border-left: 3px solid transparent; }
+    .stats-hot-row.hot-high { border-left-color: #dc3545; }
+    .stats-hot-row.hot-med { border-left-color: #fd7e14; }
+    .stats-hot-row.hot-low { border-left-color: #ffc107; }
+    .stats-section-divider {
+      border-top: 2px solid var(--border);
+      margin: 2rem 0 1.5rem;
+      padding-top: 0.25rem;
+    }
   </style>
 </head>
 <body>
-  <div id="app">
+  <div id="app" v-cloak>
     <header class="app-header py-3 mb-4 shadow-sm">
       <div class="container-fluid px-4">
         <div class="d-flex align-items-center gap-3 w-100">
           <i class="fal fa-database fa-2x"></i>
           <div class="flex-grow-1">
             <h1 class="h4 mb-0">SqlHelp</h1>
-            <p class="mb-0 small opacity-75">Editor de colunas a partir do retorno de <code class="text-white">sp_help</code></p>
+            <p class="mb-0 small opacity-75">Análise de <code class="text-white">STATISTICS IO/TIME</code> e editor de colunas (<code class="text-white">sp_help</code>)</p>
           </div>
-          <button type="button" class="btn btn-sm theme-toggle-btn"
-                  @click="toggleTheme"
-                  :title="theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'">
-            <i class="fal" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
-            <span class="ms-1 d-none d-sm-inline">{{ theme === 'dark' ? 'Claro' : 'Escuro' }}</span>
-          </button>
+          <div class="d-flex gap-2 align-items-center">
+            <a href="compare.html" class="btn btn-sm theme-toggle-btn" title="Comparar bases TSV">
+              <i class="fal fa-columns me-1"></i>
+              <span class="d-none d-md-inline">Comparar bases</span>
+            </a>
+            <button type="button" class="btn btn-sm theme-toggle-btn"
+                    @click="toggleTheme"
+                    :title="theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'">
+              <i class="fal" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+              <span class="ms-1 d-none d-sm-inline">{{ theme === 'dark' ? 'Claro' : 'Escuro' }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>
 
     <main class="container-fluid px-4 pb-5">
-      <!-- Entrada -->
+      <!-- Estatísticas IO / TIME -->
+      <section class="card shadow-sm mb-4">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="fal fa-tachometer-alt section-icon text-danger"></i>
+          <strong>Análise de STATISTICS IO e TIME</strong>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            Ative no SSMS em <strong>Opções de consulta → Execução → Avançado</strong>:
+            <code>SET STATISTICS IO</code> e <code>SET STATISTICS TIME</code> (ou <code>DEFINIR TEMPO DE ESTATÍSTICAS</code>).
+            Cole aqui todo o texto da aba <strong>Mensagens</strong>.
+          </p>
+          <textarea
+            class="form-control paste-area"
+            v-model="statsRawInput"
+            placeholder="Cole o resultado de STATISTICS IO e TIME..."
+            spellcheck="false"
+            style="min-height: 160px"
+          ></textarea>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="button" class="btn btn-danger" @click="parseStatsInput" :disabled="!statsRawInput.trim()">
+              <i class="fal fa-chart-bar me-1"></i> Analisar estatísticas
+            </button>
+            <button type="button" class="btn btn-outline-secondary" @click="loadStatsSample">
+              <i class="fal fa-file-code me-1"></i> Carregar exemplo
+            </button>
+            <button v-if="statsParsed" type="button" class="btn btn-outline-secondary" @click="resetStats">
+              <i class="fal fa-times me-1"></i> Limpar análise
+            </button>
+          </div>
+          <div v-if="statsParseError" class="alert alert-danger mt-3 mb-0">
+            <i class="fal fa-exclamation-triangle me-1"></i> {{ statsParseError }}
+          </div>
+          <template v-if="statsParsed && statsResult">
+            <hr class="my-4">
+            <div class="row g-3 mb-4">
+              <div class="col-6 col-md-4 col-lg-2">
+                <div class="stats-kpi text-center">
+                  <div class="stats-kpi-value text-primary">{{ statsResult.batches.length }}</div>
+                  <div class="stats-kpi-label">Blocos IO+Time</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <div class="stats-kpi text-center">
+                  <div class="stats-kpi-value" :class="statsResult.totals.elapsedMs > 500 ? 'text-danger' : ''">{{ formatMs(statsResult.totals.elapsedMs) }}</div>
+                  <div class="stats-kpi-label">Elapsed total</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <div class="stats-kpi text-center">
+                  <div class="stats-kpi-value" :class="statsResult.totals.cpuMs > 100 ? 'text-warning' : ''">{{ formatMs(statsResult.totals.cpuMs) }}</div>
+                  <div class="stats-kpi-label">CPU total</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <div class="stats-kpi text-center">
+                  <div class="stats-kpi-value text-info">{{ statsResult.totals.logicalReads.toLocaleString('pt-BR') }}</div>
+                  <div class="stats-kpi-label">Logical reads</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <div class="stats-kpi text-center">
+                  <div class="stats-kpi-value" :class="statsResult.totals.physicalReads > 0 ? 'text-warning' : ''">{{ statsResult.totals.physicalReads.toLocaleString('pt-BR') }}</div>
+                  <div class="stats-kpi-label">Physical reads</div>
+                </div>
+              </div>
+              <div class="col-6 col-md-4 col-lg-2">
+                <div class="stats-kpi text-center">
+                  <div class="stats-kpi-value">{{ statsResult.totals.rowsAffected.toLocaleString('pt-BR') }}</div>
+                  <div class="stats-kpi-label">Linhas afetadas</div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="statsResult.parseCompile" class="alert alert-secondary py-2 small mb-4">
+              <i class="fal fa-cog me-1"></i>
+              <strong>Parse &amp; compile:</strong>
+              CPU {{ formatMs(statsResult.parseCompile.cpuMs) }},
+              elapsed {{ formatMs(statsResult.parseCompile.elapsedMs) }}
+            </div>
+
+            <div class="row g-4 mb-4">
+              <div class="col-lg-6">
+                <h6 class="mb-3"><i class="fal fa-database me-1 text-primary"></i> I/O por tabela (agregado)</h6>
+                <div v-if="!statsResult.tableAggregates.length" class="text-muted small">Nenhuma linha <code>Table '...'</code> encontrada.</div>
+                <div v-for="t in statsResult.tableAggregates" :key="t.name" class="mb-3">
+                  <div class="d-flex justify-content-between align-items-baseline mb-1">
+                    <span class="mono fw-semibold">{{ t.name }}</span>
+                    <span class="small text-muted">{{ t.occurrences }}× · scan {{ t.scanCount }}</span>
+                  </div>
+                  <div class="small text-muted mb-1">Logical reads: <strong>{{ t.logicalReads.toLocaleString('pt-BR') }}</strong></div>
+                  <div class="stats-bar-track mb-1">
+                    <div class="stats-bar-fill stats-bar-io" :style="{ width: barPercent(t.logicalReads, statsResult.maxLogicalReads) + '%' }"></div>
+                  </div>
+                  <div v-if="t.physicalReads > 0" class="small text-muted mb-1">Physical reads: <strong class="text-warning">{{ t.physicalReads.toLocaleString('pt-BR') }}</strong></div>
+                  <div v-if="t.physicalReads > 0" class="stats-bar-track">
+                    <div class="stats-bar-fill stats-bar-phys" :style="{ width: barPercent(t.physicalReads, statsResult.maxPhysicalReads) + '%' }"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-6">
+                <h6 class="mb-3"><i class="fal fa-fire me-1 text-danger"></i> Picos de tempo (elapsed)</h6>
+                <p v-if="!statsResult.hotBatches.length" class="text-muted small mb-0">Nenhum bloco com elapsed &gt; 0 ms.</p>
+                <div v-else class="table-responsive">
+                  <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>#</th>
+                        <th>Tabela</th>
+                        <th class="text-end">Elapsed</th>
+                        <th class="text-end">CPU</th>
+                        <th class="text-end">Logical</th>
+                        <th class="text-end">Linhas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="b in statsResult.hotBatches" :key="b.index"
+                          class="stats-hot-row"
+                          :class="hotRowClass(b.elapsedMs)">
+                        <td class="text-muted">{{ b.index }}</td>
+                        <td class="mono small">{{ b.tableName || '—' }}</td>
+                        <td class="text-end fw-semibold">{{ formatMs(b.elapsedMs) }}</td>
+                        <td class="text-end">{{ formatMs(b.cpuMs) }}</td>
+                        <td class="text-end">{{ b.logicalReads }}</td>
+                        <td class="text-end text-muted">{{ b.rowsAffected != null ? b.rowsAffected : '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <details class="mb-0">
+              <summary class="small text-muted user-select-none" style="cursor:pointer">
+                Ver todos os blocos ({{ statsResult.batches.length }})
+              </summary>
+              <div class="table-responsive mt-2">
+                <table class="table table-sm mono small mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>#</th>
+                      <th>Tabela</th>
+                      <th class="text-end">Scan</th>
+                      <th class="text-end">Logical</th>
+                      <th class="text-end">Physical</th>
+                      <th class="text-end">Read-ahead</th>
+                      <th class="text-end">CPU</th>
+                      <th class="text-end">Elapsed</th>
+                      <th class="text-end">Linhas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="b in statsResult.batches" :key="'all-' + b.index"
+                        :class="{ 'table-warning': b.elapsedMs >= statsResult.elapsedThreshold }">
+                      <td>{{ b.index }}</td>
+                      <td>{{ b.tableName || '—' }}</td>
+                      <td class="text-end">{{ b.scanCount }}</td>
+                      <td class="text-end">{{ b.logicalReads }}</td>
+                      <td class="text-end">{{ b.physicalReads }}</td>
+                      <td class="text-end">{{ b.readAheadReads }}</td>
+                      <td class="text-end">{{ b.cpuMs }}</td>
+                      <td class="text-end">{{ b.elapsedMs }}</td>
+                      <td class="text-end">{{ b.rowsAffected != null ? b.rowsAffected : '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+            <p v-if="statsResult.completionTime" class="small text-muted mt-3 mb-0">
+              <i class="fal fa-clock me-1"></i> {{ statsResult.completionTime }}
+            </p>
+          </template>
+        </div>
+      </section>
+
+      <div class="stats-section-divider">
+        <p class="text-muted small mb-0 text-center">
+          <i class="fal fa-table me-1"></i> Editor de colunas (<code>sp_help</code>)
+        </p>
+      </div>
+
+      <!-- Entrada sp_help -->
       <section class="card shadow-sm mb-4" v-if="!parsed">
         <div class="card-header d-flex align-items-center gap-2">
           <i class="fal fa-paste section-icon text-primary"></i>
@@ -440,14 +672,23 @@
                                :title="isIdentityBlocked(col) ? 'Já existe outra coluna identity na tabela' : ''"
                                @change="toggleIdentity(col, $event.target.checked)">
                         <template v-if="col.isIdentity && !col._deleted">
-                          <div class="d-flex gap-1 align-items-center">
-                            <input type="number" class="form-control form-control-sm mono" style="width:3.2rem"
-                                   v-model.number="col.identitySeed" min="0" title="Seed"
-                                   @input="markModified(col)">
-                            <span class="small text-muted">,</span>
-                            <input type="number" class="form-control form-control-sm mono" style="width:3.2rem"
-                                   v-model.number="col.identityIncrement" min="1" title="Increment"
-                                   @input="markModified(col)">
+                          <div class="d-flex flex-column align-items-center gap-1">
+                            <div class="d-flex gap-1 align-items-center">
+                              <input type="number" class="form-control form-control-sm mono" style="width:3.2rem"
+                                     v-model.number="col.identitySeed" min="0" title="Seed"
+                                     @input="markModified(col)">
+                              <span class="small text-muted">,</span>
+                              <input type="number" class="form-control form-control-sm mono" style="width:3.2rem"
+                                     v-model.number="col.identityIncrement" min="1" title="Increment"
+                                     @input="markModified(col)">
+                            </div>
+                            <label v-if="col._status !== 'new'" class="form-check-label small mb-0 text-nowrap"
+                                   title="Usa CREATE TABLE + IDENTITY_INSERT + INSERT (UPDATE em coluna identity não é permitido)">
+                              <input type="checkbox" class="form-check-input"
+                                     v-model="col.identityPreserveValues"
+                                     @change="markModified(col)">
+                              Preservar valores
+                            </label>
                           </div>
                         </template>
                       </div>
@@ -651,6 +892,209 @@
   <script>
     const { createApp } = Vue;
 
+    const SAMPLE_STATISTICS = `SQL Server parse and compile time:
+   CPU time = 0 ms, elapsed time = 0 ms.
+
+(10 linhas afetadas)
+Table 'MAO_STATUS_OUVIDORIA'. Scan count 1, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 0 ms,  elapsed time = 1 ms.
+
+(10 linhas afetadas)
+Table 'MAO_STATUS_OUVIDORIA'. Scan count 1, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 0 ms,  elapsed time = 441 ms.
+
+(10 linhas afetadas)
+Table 'MAO_STATUS_OUVIDORIA'. Scan count 1, logical reads 2, physical reads 0, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 0 ms,  elapsed time = 445 ms.
+
+(10 linhas afetadas)
+Table 'PEDIDOS'. Scan count 2, logical reads 1500, physical reads 12, page server reads 0, read-ahead reads 8, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 63 ms,  elapsed time = 589 ms.
+
+(10 linhas afetadas)
+Table 'MAO_STATUS_OUVIDORIA'. Scan count 1, logical reads 2, physical reads 1, page server reads 0, read-ahead reads 0, page server read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob page server reads 0, lob read-ahead reads 0, lob page server read-ahead reads 0.
+
+ SQL Server Execution Times:
+   CPU time = 62 ms,  elapsed time = 242 ms.
+
+Horário de conclusão: 2026-05-19T19:43:04.9740822-03:00`;
+
+    function normalizeStatsText(text) {
+      return String(text || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\r\n/g, '\n');
+    }
+
+    function parseStatisticsOutput(text) {
+      const normalized = normalizeStatsText(text);
+      const lines = normalized.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+      const rowsRe = /^\((\d+)\s+(?:linhas?\s+afetadas|rows?\s+affected)\)/i;
+      const tableRe = /^Table\s+'([^']+)'\.\s*Scan count\s+(\d+),\s*logical reads\s+(\d+),\s*physical reads\s+(\d+)(?:,\s*page server reads\s+(\d+))?(?:,\s*read-ahead reads\s+(\d+))?/i;
+      const timeRe = /CPU time\s*=\s*(\d+)\s*ms,?\s*elapsed time\s*=\s*(\d+)\s*ms/i;
+      const parseCompileHeader = /SQL Server parse and compile time/i;
+      const execTimesHeader = /SQL Server Execution Times/i;
+
+      const result = {
+        parseCompile: null,
+        batches: [],
+        tableAggregates: [],
+        hotBatches: [],
+        completionTime: '',
+        totals: {
+          cpuMs: 0,
+          elapsedMs: 0,
+          logicalReads: 0,
+          physicalReads: 0,
+          rowsAffected: 0
+        },
+        maxLogicalReads: 1,
+        maxPhysicalReads: 1,
+        elapsedThreshold: 50
+      };
+
+      let pendingRows = null;
+      let currentBatch = null;
+      let expectParseCompileTime = false;
+      let expectExecTime = false;
+      let batchIndex = 0;
+
+      function flushBatch() {
+        if (!currentBatch) return;
+        batchIndex += 1;
+        currentBatch.index = batchIndex;
+        result.batches.push(currentBatch);
+        result.totals.cpuMs += currentBatch.cpuMs;
+        result.totals.elapsedMs += currentBatch.elapsedMs;
+        result.totals.logicalReads += currentBatch.logicalReads;
+        result.totals.physicalReads += currentBatch.physicalReads;
+        if (currentBatch.rowsAffected != null) {
+          result.totals.rowsAffected += currentBatch.rowsAffected;
+        }
+        currentBatch = null;
+      }
+
+      for (const line of lines) {
+        if (/^Horário de conclusão:/i.test(line)) {
+          result.completionTime = line;
+          continue;
+        }
+
+        if (parseCompileHeader.test(line)) {
+          expectParseCompileTime = true;
+          continue;
+        }
+
+        if (execTimesHeader.test(line)) {
+          expectExecTime = true;
+          continue;
+        }
+
+        const timeMatch = line.match(timeRe);
+        if (timeMatch) {
+          const cpu = parseInt(timeMatch[1], 10) || 0;
+          const elapsed = parseInt(timeMatch[2], 10) || 0;
+          if (expectParseCompileTime) {
+            result.parseCompile = { cpuMs: cpu, elapsedMs: elapsed };
+            expectParseCompileTime = false;
+            continue;
+          }
+          if (expectExecTime && currentBatch) {
+            currentBatch.cpuMs = cpu;
+            currentBatch.elapsedMs = elapsed;
+            expectExecTime = false;
+            flushBatch();
+            continue;
+          }
+          if (currentBatch && currentBatch.tableName) {
+            currentBatch.cpuMs = cpu;
+            currentBatch.elapsedMs = elapsed;
+            flushBatch();
+          }
+          continue;
+        }
+
+        const rowsMatch = line.match(rowsRe);
+        if (rowsMatch) {
+          pendingRows = parseInt(rowsMatch[1], 10);
+          continue;
+        }
+
+        const tableMatch = line.match(tableRe);
+        if (tableMatch) {
+          flushBatch();
+          currentBatch = {
+            tableName: tableMatch[1],
+            scanCount: parseInt(tableMatch[2], 10) || 0,
+            logicalReads: parseInt(tableMatch[3], 10) || 0,
+            physicalReads: parseInt(tableMatch[4], 10) || 0,
+            readAheadReads: parseInt(tableMatch[6], 10) || 0,
+            rowsAffected: pendingRows,
+            cpuMs: 0,
+            elapsedMs: 0
+          };
+          pendingRows = null;
+          expectExecTime = false;
+          continue;
+        }
+      }
+
+      flushBatch();
+
+      if (!result.batches.length) {
+        throw new Error('Nenhuma estatística IO/TIME encontrada. Cole o texto completo da aba Mensagens do SSMS.');
+      }
+
+      const tableMap = {};
+      for (const b of result.batches) {
+        const key = b.tableName || '(sem tabela)';
+        if (!tableMap[key]) {
+          tableMap[key] = {
+            name: key,
+            occurrences: 0,
+            scanCount: 0,
+            logicalReads: 0,
+            physicalReads: 0,
+            readAheadReads: 0,
+            cpuMs: 0,
+            elapsedMs: 0
+          };
+        }
+        const t = tableMap[key];
+        t.occurrences += 1;
+        t.scanCount += b.scanCount;
+        t.logicalReads += b.logicalReads;
+        t.physicalReads += b.physicalReads;
+        t.readAheadReads += b.readAheadReads;
+        t.cpuMs += b.cpuMs;
+        t.elapsedMs += b.elapsedMs;
+      }
+
+      result.tableAggregates = Object.values(tableMap)
+        .sort((a, b) => b.logicalReads - a.logicalReads || b.elapsedMs - a.elapsedMs);
+
+      result.maxLogicalReads = Math.max(1, ...result.tableAggregates.map(t => t.logicalReads));
+      result.maxPhysicalReads = Math.max(1, ...result.tableAggregates.map(t => t.physicalReads));
+
+      const maxElapsed = Math.max(...result.batches.map(b => b.elapsedMs));
+      result.elapsedThreshold = maxElapsed > 100 ? Math.max(50, Math.floor(maxElapsed * 0.25)) : 1;
+
+      result.hotBatches = result.batches
+        .filter(b => b.elapsedMs > 0 || b.cpuMs > 0)
+        .sort((a, b) => b.elapsedMs - a.elapsedMs || b.cpuMs - a.cpuMs || b.logicalReads - a.logicalReads)
+        .slice(0, 20);
+
+      return result;
+    }
+
     const SAMPLE_SP_HELP = `Name                                                                                                                             Owner                                                                                                                            Type                            Created_datetime
 -------------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------------------------------------------------------------------------------------- ------------------------------- -----------------------
 ANO                                                                                                                              dbo                                                                                                                              user table                      2026-05-11 15:59:30.080
@@ -828,6 +1272,21 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       return ('_' + colName + '_id_new').replace(/[^a-zA-Z0-9_]/g, '_');
     }
 
+    function sqlhelpNewTableName(tableName) {
+      return (tableName + '__sqlhelp_new').replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    function buildColumnDefinitionSql(col, identityCol) {
+      const typeSql = buildTypeSql(col);
+      const isTargetIdentity = identityCol && (col._id === identityCol._id || col.name === identityCol.name);
+      if (col.isIdentity || isTargetIdentity) {
+        const seed = col.identitySeed ?? identityCol?.identitySeed ?? 1;
+        const inc = col.identityIncrement || identityCol?.identityIncrement || 1;
+        return `[${col.name}] ${typeSql} IDENTITY(${seed}, ${inc}) NOT NULL`;
+      }
+      return `[${col.name}] ${typeSql} ${col.nullable ? 'NULL' : 'NOT NULL'}`;
+    }
+
     function hasExecutableSqlLines(lines) {
       return lines.some(line => {
         const t = line.trim();
@@ -848,7 +1307,8 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           continue;
         }
         if (/^SET NOCOUNT ON/i.test(t)) continue;
-        statements.push(t.endsWith(';') ? t : t + ';');
+        // Não acrescentar ';' por linha: blocos multilinha (CREATE TABLE, INSERT…SELECT) quebram
+        statements.push(line.replace(/\s+$/, ''));
       }
 
       const out = [...headerComments];
@@ -876,15 +1336,15 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       out.push('  DECLARE @SqlHelpErrSev INT = ERROR_SEVERITY();');
       out.push('  DECLARE @SqlHelpErrState INT = ERROR_STATE();');
       out.push('  DECLARE @SqlHelpErrLine INT = ERROR_LINE();');
-      out.push('  DECLARE @SqlHelpErrProc NVARCHAR(256) = ISNULL(ERROR_PROCEDURE(), N''-'');');
+      out.push("  DECLARE @SqlHelpErrProc NVARCHAR(256) = ISNULL(ERROR_PROCEDURE(), N'-');");
       out.push('');
-      out.push('  PRINT N'''';');
-      out.push('  PRINT N''================================================'';');
-      out.push('  PRINT N''SqlHelp: ERRO — alterações revertidas (ROLLBACK)'';');
-      out.push('  PRINT N''================================================'';');
-      out.push('  PRINT N''Mensagem: '' + @SqlHelpErrMsg;');
-      out.push('  PRINT N''Linha: '' + CAST(@SqlHelpErrLine AS NVARCHAR(20));');
-      out.push('  PRINT N''Procedure: '' + @SqlHelpErrProc;');
+      out.push("  PRINT N'';");
+      out.push("  PRINT N'================================================';");
+      out.push("  PRINT N'SqlHelp: ERRO — alterações revertidas (ROLLBACK)';");
+      out.push("  PRINT N'================================================';");
+      out.push("  PRINT N'Mensagem: ' + @SqlHelpErrMsg;");
+      out.push("  PRINT N'Linha: ' + CAST(@SqlHelpErrLine AS NVARCHAR(20));");
+      out.push("  PRINT N'Procedure: ' + @SqlHelpErrProc;");
       out.push('');
       out.push('  RAISERROR(@SqlHelpErrMsg, @SqlHelpErrSev, @SqlHelpErrState);');
       out.push('END CATCH');
@@ -977,7 +1437,8 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             defaultValue: '',
             defaultConstraintName: '',
             hasDefault: false,
-            nullReplacement: ''
+            nullReplacement: '',
+            identityPreserveValues: true
           };
           col.lengthDisplay = col.length != null ? String(col.length) : '';
           col._original = snapshotColumn(col);
@@ -1075,6 +1536,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         isIdentity: col.isIdentity,
         identitySeed: col.identitySeed,
         identityIncrement: col.identityIncrement,
+        identityPreserveValues: col.identityPreserveValues !== false,
         hasDefault: !!col.hasDefault,
         defaultValue: col.defaultValue,
         defaultConstraintName: col.defaultConstraintName
@@ -1126,6 +1588,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         a.isIdentity === b.isIdentity &&
         a.identitySeed === b.identitySeed &&
         a.identityIncrement === b.identityIncrement &&
+        a.identityPreserveValues === b.identityPreserveValues &&
         !!a.hasDefault === !!b.hasDefault &&
         (a.defaultValue || '') === (b.defaultValue || '') &&
         (a.defaultConstraintName || '') === (b.defaultConstraintName || '');
@@ -1135,6 +1598,10 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
       data() {
         return {
           theme: localStorage.getItem('sqlhelp-theme') || 'dark',
+          statsRawInput: '',
+          statsParsed: false,
+          statsParseError: '',
+          statsResult: null,
           rawInput: '',
           parseError: '',
           parsed: false,
@@ -1188,6 +1655,43 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         }
       },
       methods: {
+        formatMs(ms) {
+          const n = Number(ms) || 0;
+          return n + ' ms';
+        },
+        barPercent(value, max) {
+          const v = Number(value) || 0;
+          const m = Number(max) || 1;
+          return Math.min(100, Math.round((v / m) * 100));
+        },
+        hotRowClass(elapsedMs) {
+          const e = Number(elapsedMs) || 0;
+          const threshold = this.statsResult?.elapsedThreshold || 50;
+          if (e >= threshold * 2) return 'hot-high';
+          if (e >= threshold) return 'hot-med';
+          if (e > 0) return 'hot-low';
+          return '';
+        },
+        loadStatsSample() {
+          this.statsRawInput = SAMPLE_STATISTICS;
+          this.statsParseError = '';
+        },
+        parseStatsInput() {
+          this.statsParseError = '';
+          try {
+            this.statsResult = parseStatisticsOutput(this.statsRawInput);
+            this.statsParsed = true;
+          } catch (e) {
+            this.statsParsed = false;
+            this.statsResult = null;
+            this.statsParseError = e.message || 'Erro ao analisar estatísticas.';
+          }
+        },
+        resetStats() {
+          this.statsParsed = false;
+          this.statsResult = null;
+          this.statsParseError = '';
+        },
         loadSample() {
           this.rawInput = SAMPLE_SP_HELP;
           this.parseError = '';
@@ -1270,6 +1774,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             col.nullable = false;
             col.identitySeed = col.identitySeed ?? 1;
             col.identityIncrement = col.identityIncrement || 1;
+            if (col._status !== 'new') col.identityPreserveValues = true;
           } else {
             col.isIdentity = false;
           }
@@ -1293,6 +1798,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             isIdentity: false,
             identitySeed: 1,
             identityIncrement: 1,
+            identityPreserveValues: false,
             hasDefault: false,
             defaultValue: '',
             defaultConstraintName: '',
@@ -1375,33 +1881,31 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           this.primaryKey.columns = cols;
           this.pkDragEnd();
         },
+        pkExistsInDatabase() {
+          const o = this.primaryKey._original;
+          return !!(o && o.enabled && o.name);
+        },
         getPkConstraintNameForDrop() {
-          if (this.primaryKey.enabled && this.primaryKey.name) {
-            return this.primaryKey.name.trim();
-          }
           const o = this.primaryKey._original;
           if (o && o.enabled && o.name) return o.name.trim();
           return '';
         },
-        isColumnInPk(colName) {
-          if (this.primaryKey.enabled) {
-            if (normalizePkColumns(this.primaryKey.columns).some(c => c.name === colName)) return true;
-          }
+        isColumnInOriginalPk(colName) {
           const o = this.primaryKey._original;
-          if (o && o.enabled && pkColumnNames(o.columns).includes(colName)) return true;
-          return false;
+          return !!(o && o.enabled && pkColumnNames(o.columns).includes(colName));
         },
         appendDropPkConstraint(lines, qTable, colName, pkAlreadyDropped) {
           if (pkAlreadyDropped) return false;
-          if (!this.isColumnInPk(colName)) return false;
+          if (!this.pkExistsInDatabase()) return false;
+          if (!this.isColumnInOriginalPk(colName)) return false;
           const pkName = this.getPkConstraintNameForDrop();
           if (!pkName) return false;
-          lines.push(`-- Remover PK (coluna [${colName}] faz parte da chave)`);
+          lines.push(`-- Remover PK existente no banco (coluna [${colName}] faz parte da chave)`);
           lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${pkName}];`);
           lines.push('GO');
           return true;
         },
-        appendAddPkConstraint(lines, qTable, schema, table) {
+        appendAddPkConstraint(lines, qTable, schema, table, isRecreate) {
           if (!this.primaryKey.enabled) return false;
           const validCols = normalizePkColumns(this.primaryKey.columns).filter(item => {
             return this.columns.some(c => c.name === item.name && !c._deleted);
@@ -1411,38 +1915,72 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           const colsSql = validCols.map(c => `[${c.name}] ${c.direction || 'ASC'}`).join(', ');
           const pkName = (this.primaryKey.name && this.primaryKey.name.trim()) ||
             `PK_${schema}_${table}`.replace(/[^a-zA-Z0-9_]/g, '_');
-          lines.push('-- Recriar Primary Key');
+          lines.push(isRecreate ? '-- Recriar Primary Key' : '-- Criar Primary Key');
           lines.push(`ALTER TABLE ${qTable} ADD CONSTRAINT [${pkName}] PRIMARY KEY ${pkType} (${colsSql});`);
           lines.push('GO');
           return true;
         },
+        shouldAddPkAtEnd(pkRecreatedInline) {
+          if (!this.primaryKey.enabled || pkRecreatedInline) return false;
+          if (!this.pkExistsInDatabase()) return true;
+          return this.primaryKeyChanged() || this.needsDropPrimaryKeyFirst();
+        },
         appendAddIdentityScript(lines, col, qTable, schema, table, pkAlreadyDropped) {
-          const seed = col.identitySeed ?? 1;
-          const inc = col.identityIncrement || 1;
-          const tmp = identityTempColumnName(col.name);
-          const typeSql = buildTypeSql(col);
+          const preserve = col.identityPreserveValues !== false;
           let pkDropped = this.appendDropPkConstraint(lines, qTable, col.name, pkAlreadyDropped);
 
-          lines.push(`-- Adicionar IDENTITY em [${col.name}] (recria a coluna)`);
           if (col.hasDefault && col.defaultConstraintName) {
             lines.push(`ALTER TABLE ${qTable} DROP CONSTRAINT [${col.defaultConstraintName}];`);
             lines.push('GO');
           }
-          lines.push(`ALTER TABLE ${qTable} ADD [${tmp}] ${typeSql} IDENTITY(${seed}, ${inc}) NOT NULL;`);
-          lines.push('GO');
-          lines.push(`SET IDENTITY_INSERT ${qTable} ON;`);
-          lines.push(`UPDATE ${qTable} SET [${tmp}] = [${col.name}];`);
-          lines.push('GO');
-          lines.push(`SET IDENTITY_INSERT ${qTable} OFF;`);
-          lines.push('GO');
-          lines.push(`ALTER TABLE ${qTable} DROP COLUMN [${col.name}];`);
-          lines.push('GO');
-          lines.push(`EXEC sp_rename N'${schema}.${table}.${tmp}', N'${col.name}', 'COLUMN';`);
-          lines.push('GO');
+
+          if (preserve) {
+            const newTable = sqlhelpNewTableName(table);
+            const qNewTable = `[${schema}].[${newTable}]`;
+            const activeCols = this.columns.filter(c => !c._deleted);
+
+            lines.push(`-- Adicionar IDENTITY em [${col.name}] preservando valores (nova tabela + INSERT)`);
+            lines.push(`-- IDENTITY não permite UPDATE; IDENTITY_INSERT só funciona com INSERT`);
+            lines.push(`CREATE TABLE ${qNewTable} (`);
+            activeCols.forEach((c, i) => {
+              const comma = i < activeCols.length - 1 ? ',' : '';
+              lines.push(`  ${buildColumnDefinitionSql(c, col)}${comma}`);
+            });
+            lines.push(');');
+            lines.push('GO');
+
+            const colList = activeCols.map(c => `[${c.name}]`).join(', ');
+            lines.push(`SET IDENTITY_INSERT ${qNewTable} ON;`);
+            lines.push('GO');
+            lines.push(`INSERT INTO ${qNewTable} (${colList})`);
+            lines.push(`SELECT ${colList} FROM ${qTable};`);
+            lines.push('GO');
+            lines.push(`SET IDENTITY_INSERT ${qNewTable} OFF;`);
+            lines.push('GO');
+            lines.push(`DROP TABLE ${qTable};`);
+            lines.push('GO');
+            lines.push(`EXEC sp_rename N'${schema}.${newTable}', N'${table}', 'OBJECT';`);
+            lines.push('GO');
+          } else {
+            const seed = col.identitySeed ?? 1;
+            const inc = col.identityIncrement || 1;
+            const tmp = identityTempColumnName(col.name);
+            const typeSql = buildTypeSql(col);
+
+            lines.push(`-- Adicionar IDENTITY em [${col.name}] (novos valores gerados pelo SQL Server)`);
+            lines.push(`ALTER TABLE ${qTable} ADD [${tmp}] ${typeSql} IDENTITY(${seed}, ${inc}) NOT NULL;`);
+            lines.push('GO');
+            lines.push(`ALTER TABLE ${qTable} DROP COLUMN [${col.name}];`);
+            lines.push('GO');
+            lines.push(`EXEC sp_rename N'${schema}.${table}.${tmp}', N'${col.name}', 'COLUMN';`);
+            lines.push('GO');
+          }
 
           let pkRecreated = false;
           if (pkDropped || pkAlreadyDropped) {
-            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table);
+            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table, true);
+          } else if (this.primaryKey.enabled && !this.pkExistsInDatabase()) {
+            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table, false);
           }
           lines.push('');
           return pkRecreated;
@@ -1464,7 +2002,9 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
 
           let pkRecreated = false;
           if (pkDropped || pkAlreadyDropped) {
-            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table);
+            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table, true);
+          } else if (this.primaryKey.enabled && !this.pkExistsInDatabase()) {
+            pkRecreated = this.appendAddPkConstraint(lines, qTable, schema, table, false);
           }
           lines.push('');
           return pkRecreated;
@@ -1475,8 +2015,9 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           return !primaryKeyEqual(this.primaryKey, o);
         },
         needsDropPrimaryKeyFirst() {
+          if (!this.pkExistsInDatabase()) return false;
           const o = this.primaryKey._original;
-          if (!o || !o.enabled || !o.name) return false;
+          if (!this.primaryKey.enabled) return true;
           if (this.primaryKeyChanged()) return true;
           const origPkNames = pkColumnNames(o.columns);
           const deletedPkCol = this.columns.some(c => c._deleted && origPkNames.includes(c.name));
@@ -1576,7 +2117,11 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
                 if (this.appendAddIdentityScript(lines, col, qTable, schema, table, pkDroppedEarly)) {
                   pkRecreatedInline = true;
                 }
-                warnings.push(`Identity em [${col.name}]: coluna recriada — PK/FK recriadas se necessário.`);
+                if (col.identityPreserveValues !== false) {
+                  warnings.push(`Identity em [${col.name}]: tabela recriada — revise FK, defaults e permissões.`);
+                } else {
+                  warnings.push(`Identity em [${col.name}]: valores antigos de [${col.name}] serão descartados (novos IDs).`);
+                }
               } else if (!col.isIdentity && orig.isIdentity) {
                 if (this.appendRemoveIdentityScript(lines, col, qTable, schema, table, pkDroppedEarly)) {
                   pkRecreatedInline = true;
@@ -1645,7 +2190,7 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             lines.push('');
           }
 
-          if (this.primaryKey.enabled && (this.primaryKeyChanged() || this.needsDropPrimaryKeyFirst()) && !pkRecreatedInline) {
+          if (this.shouldAddPkAtEnd(pkRecreatedInline)) {
             const pkCols = normalizePkColumns(this.primaryKey.columns);
             const validCols = pkCols.filter(item => {
               const col = this.columns.find(c => c.name === item.name && !c._deleted);
@@ -1657,7 +2202,8 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
             }
             if (validCols.length) {
               hasChanges = true;
-              this.appendAddPkConstraint(lines, qTable, schema, table);
+              const isRecreate = this.pkExistsInDatabase() && (this.primaryKeyChanged() || this.needsDropPrimaryKeyFirst());
+              this.appendAddPkConstraint(lines, qTable, schema, table, isRecreate);
               lines.push('');
             } else if (this.primaryKey.enabled) {
               warnings.push('Primary Key ativa sem colunas válidas selecionadas.');
