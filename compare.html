@@ -29,6 +29,7 @@
       --row-new: rgba(255, 193, 7, 0.35);
       --row-modified: rgba(13, 202, 240, 0.2);
       --row-only-dest: rgba(108, 117, 125, 0.15);
+      --row-rename: rgba(111, 66, 193, 0.15);
       --row-same: transparent;
       --sql-bg: #1e1e1e;
       --sql-color: #d4d4d4;
@@ -54,6 +55,7 @@
       --row-new: rgba(255, 193, 7, 0.12);
       --row-modified: rgba(13, 202, 240, 0.12);
       --row-only-dest: rgba(108, 117, 125, 0.12);
+      --row-rename: rgba(111, 66, 193, 0.18);
       --row-same: transparent;
       --sql-bg: #0d0d0d;
       --sql-color: #d4d4d4;
@@ -143,6 +145,7 @@
     tr.row-missing > * { background-color: var(--row-new) !important; }
     tr.row-diff > * { background-color: var(--row-modified) !important; }
     tr.row-only-dest > * { background-color: var(--row-only-dest) !important; }
+    tr.row-rename > * { background-color: var(--row-rename) !important; }
 
     [v-cloak] { display: none !important; }
 
@@ -178,6 +181,35 @@
     }
 
     .col-def-cell { font-size: 0.8rem; }
+    .col-type-datetime2 { color: #dc3545 !important; font-weight: 600; }
+    [data-theme="dark"] .col-type-datetime2 { color: #f87171 !important; }
+    .col-name-concessao { color: #d63384 !important; font-weight: 600; }
+    [data-theme="dark"] .col-name-concessao { color: #f472b6 !important; }
+
+    .table-sidebar .list-group-item.table-item-only-dest:not(.active) {
+      opacity: 0.55;
+    }
+    .table-sidebar .list-group-item.table-item-only-origem:not(.active) {
+      opacity: 0.85;
+    }
+    .table-sidebar .list-group-item.table-item-both-priority:not(.active) {
+      border-left: 3px solid #ffc107;
+      padding-left: calc(0.75rem - 3px);
+    }
+    .table-diff-legend {
+      font-size: 0.7rem;
+      line-height: 1.45;
+      color: var(--text-muted);
+    }
+    .table-diff-legend .legend-dot {
+      display: inline-block;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      margin-right: 0.25rem;
+      vertical-align: middle;
+    }
+
     .section-icon { width: 1.25rem; text-align: center; }
 
     .compare-layout {
@@ -274,21 +306,31 @@
               <div class="card-body p-2">
                 <input type="search" class="form-control form-control-sm mb-2"
                        v-model="tableFilter" placeholder="Filtrar tabela...">
-                <div class="form-check mb-2">
-                  <input type="checkbox" class="form-check-input" id="onlyDiff" v-model="onlyWithDiff">
-                  <label class="form-check-label small" for="onlyDiff">Somente com diferenças</label>
+                <label class="form-label small text-muted mb-1">Exibir tabelas</label>
+                <select class="form-select form-select-sm mb-2" v-model="tableFilterMode">
+                  <option value="all">Todos</option>
+                  <option value="both_diff">Em Ambos — Diferenças</option>
+                  <option value="only_origem">Só Origem</option>
+                  <option value="only_destino">Só Destino</option>
+                  <option value="both_extra_dest">Em Ambos — Extra Destino</option>
+                </select>
+                <div class="table-diff-legend mb-2">
+                  <div><span class="legend-dot" style="background:#ffc107"></span> Em ambos — diferenças</div>
+                  <div><span class="legend-dot" style="background:#0dcaf0"></span> Só na origem</div>
+                  <div><span class="legend-dot" style="background:#6c757d"></span> Só no destino</div>
+                  <div class="mt-1"><span class="legend-dot" style="background:#0d6efd"></span> Em ambos — só col. extra no destino</div>
                 </div>
                 <div class="table-sidebar">
                   <div class="list-group list-group-flush">
                     <button v-for="t in filteredTables" :key="t.key" type="button"
                             class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
-                            :class="{ active: selectedTableKey === t.key }"
+                            :class="tableSidebarItemClass(t)"
                             @click="selectTable(t.key)">
                       <span>
                         <span class="mono d-block">{{ t.schema }}.{{ t.name }}</span>
                       </span>
                       <span v-if="t.diffCount" class="badge rounded-pill"
-                            :class="selectedTableKey === t.key ? 'bg-light text-dark' : 'bg-warning text-dark'">
+                            :class="tableDiffBadgeClass(t)">
                         {{ t.diffCount }}
                       </span>
                     </button>
@@ -332,6 +374,7 @@
                           <th>Origem</th>
                           <th>Destino</th>
                           <th style="min-width:9rem">Valor default</th>
+                          <th style="min-width:11rem">Correspondência</th>
                           <th style="width:7rem">Status</th>
                           <th style="width:5rem">Script</th>
                         </tr>
@@ -345,13 +388,25 @@
                                    :checked="isSelected(row)"
                                    @change="toggleSelect(row, $event.target.checked)">
                           </td>
-                          <td class="fw-semibold">{{ row.columnName }}</td>
+                          <td class="fw-semibold" :class="columnNameClass(row.columnName)">{{ row.columnName }}</td>
                           <td class="col-def-cell">
-                            <span v-if="row.origem">{{ formatColDef(row.origem) }}</span>
+                            <span v-if="row.origem" :class="colDefTextClass(row.origem)">{{ formatColDef(row.origem) }}</span>
+                            <span v-else-if="row.isRename && row.mapPartner" class="text-muted">
+                              ↔ {{ row.mapPartner }}
+                              <span v-if="getOrigemCol(row.mapPartner)" :class="colDefTextClass(getOrigemCol(row.mapPartner))">
+                                ({{ formatColDef(getOrigemCol(row.mapPartner)) }})
+                              </span>
+                            </span>
                             <span v-else class="text-muted">—</span>
                           </td>
                           <td class="col-def-cell">
-                            <span v-if="row.destino">{{ formatColDef(row.destino) }}</span>
+                            <span v-if="row.destino" :class="colDefTextClass(row.destino)">{{ formatColDef(row.destino) }}</span>
+                            <span v-else-if="row.isRename && row.mapPartner" class="text-muted">
+                              ↔ {{ row.mapPartner }}
+                              <span v-if="getDestinoCol(row.mapPartner)" :class="colDefTextClass(getDestinoCol(row.mapPartner))">
+                                ({{ formatColDef(getDestinoCol(row.mapPartner)) }})
+                              </span>
+                            </span>
                             <span v-else class="text-muted">—</span>
                           </td>
                           <td>
@@ -362,6 +417,26 @@
                                    @input="setDefaultValue(row, $event.target.value)"
                                    placeholder="ex: 0, '', getdate()"
                                    title="UPDATE antes de NOT NULL (WHERE coluna IS NULL)">
+                            <span v-else class="text-muted small">—</span>
+                          </td>
+                          <td>
+                            <select v-if="row.canMapFromOrigem"
+                                    class="form-select form-select-sm mono"
+                                    :value="getMappedDestino(selectedTableKey, row.columnName)"
+                                    @change="setMapping(selectedTableKey, row.columnName, $event.target.value)">
+                              <option value="">— nenhuma —</option>
+                              <option v-for="c in destCandidatesForOrigem(row)" :key="c" :value="c">{{ c }}</option>
+                            </select>
+                            <select v-else-if="row.canMapFromDestino"
+                                    class="form-select form-select-sm mono"
+                                    :value="getMappedOrigem(selectedTableKey, row.columnName)"
+                                    @change="setMappingFromDestino(selectedTableKey, row.columnName, $event.target.value)">
+                              <option value="">— nenhuma —</option>
+                              <option v-for="c in origemCandidatesForDestino(row)" :key="c" :value="c">{{ c }}</option>
+                            </select>
+                            <span v-else-if="row.mapPartner" class="small text-muted">
+                              ↔ {{ row.mapPartner }}
+                            </span>
                             <span v-else class="text-muted small">—</span>
                           </td>
                           <td>
@@ -377,7 +452,59 @@
                     <i class="fal fa-info-circle me-1"></i>
                     Quando a origem é <strong>NOT NULL</strong> e o destino é <strong>NULL</strong> (ou a coluna não existe),
                     informe o <strong>valor default</strong> para gerar <code>ADD NULL</code> → <code>UPDATE</code> → <code>ALTER COLUMN NOT NULL</code>.
+                    Use <strong>Correspondência</strong> quando a coluna existe com outro nome no destino (gera <code>sp_rename</code>).
+                    Com <strong>2 colunas datetime2</strong> selecionadas, defina Temporal Inicial/Final para gerar <code>SYSTEM_TIME</code>.
                   </p>
+                </div>
+              </section>
+
+              <section v-if="selectedDatetime2Count > 0" class="card shadow-sm border-danger mb-3">
+                <div class="card-header d-flex align-items-center gap-2 py-2">
+                  <i class="fal fa-clock section-icon text-danger"></i>
+                  <strong class="small">System-Time (colunas datetime2)</strong>
+                </div>
+                <div class="card-body py-3">
+                  <p v-if="selectedDatetime2Count !== 2" class="text-warning small mb-2">
+                    <i class="fal fa-exclamation-triangle me-1"></i>
+                    Selecione <strong>exatamente 2</strong> colunas <code>datetime2</code> (vermelhas).
+                    Atualmente: {{ selectedDatetime2Count }} selecionada(s).
+                  </p>
+                  <template v-else>
+                    <p class="text-muted small mb-3">
+                      Obrigatório definir qual coluna será <strong>Temporal Inicial</strong> (ROW START)
+                      e qual será <strong>Temporal Final</strong> (ROW END) antes de gerar o script.
+                    </p>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Temporal Inicial (ROW START)</label>
+                        <select class="form-select form-select-sm mono"
+                                :class="{ 'is-invalid': temporalTouched && !temporalStart }"
+                                :value="temporalStart"
+                                @change="setTemporalField('start', $event.target.value)">
+                          <option value="">— selecione —</option>
+                          <option v-for="c in selectedDatetime2Cols" :key="'s-' + c" :value="c">{{ c }}</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Temporal Final (ROW END)</label>
+                        <select class="form-select form-select-sm mono"
+                                :class="{ 'is-invalid': temporalTouched && !temporalEnd }"
+                                :value="temporalEnd"
+                                @change="setTemporalField('end', $event.target.value)">
+                          <option value="">— selecione —</option>
+                          <option v-for="c in selectedDatetime2Cols" :key="'e-' + c" :value="c">{{ c }}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div v-if="temporalStart && temporalEnd && temporalStart === temporalEnd"
+                         class="alert alert-danger py-2 small mt-2 mb-0">
+                      Temporal Inicial e Final devem ser colunas diferentes.
+                    </div>
+                    <div v-else-if="temporalConfigValid" class="alert alert-success py-2 small mt-2 mb-0">
+                      <i class="fal fa-check me-1"></i>
+                      Será gerado <code>PERIOD FOR SYSTEM_TIME ({{ temporalStart }}, {{ temporalEnd }})</code>
+                    </div>
+                  </template>
                 </div>
               </section>
 
@@ -402,8 +529,9 @@
                 <div class="card-body">
                   <p v-if="!generatedSql" class="text-muted small mb-2">
                     Marque as colunas desejadas. Colunas faltantes geram <code>ADD</code>; existentes geram
-                    <code>ALTER COLUMN</code>. Origem <strong>NOT NULL</strong> com destino <strong>NULL</strong> usa
-                    valor default + <code>UPDATE</code> antes do <code>NOT NULL</code>.
+                    <code>ALTER COLUMN</code> ou <code>sp_rename</code> (colunas mapeadas).
+                    Origem <strong>NOT NULL</strong> com destino <strong>NULL</strong> usa valor default + <code>UPDATE</code> antes do <code>NOT NULL</code>.
+                    Duas colunas <code>datetime2</code> geram <code>PERIOD FOR SYSTEM_TIME</code> (após definir Temporal Inicial/Final).
                   </p>
                   <pre class="sql-output mono mb-0" v-show="generatedSql">{{ generatedSql }}</pre>
                   <div v-if="scriptWarnings.length" class="alert alert-warning mt-3 mb-0 small">
@@ -509,6 +637,45 @@
       if (!origem || origem.nullable || origem.isIdentity) return false;
       if (!existsInDest) return true;
       return !!(destino && destino.nullable);
+    }
+
+    function isDatetime2Col(col) {
+      return !!(col && (col.type || '').toLowerCase() === 'datetime2');
+    }
+
+    function datetime2Precision(col) {
+      const s = col && col.scale;
+      if (s != null && s > 0) return s;
+      return 7;
+    }
+
+    function buildTemporalSystemTimeLines(schema, table, startCol, endCol, startColDef, endColDef) {
+      const precS = datetime2Precision(startColDef);
+      const precE = datetime2Precision(endColDef);
+      const sch = (schema || 'dbo').toUpperCase();
+      const tbl = (table || '').toUpperCase();
+      const tblSafe = tbl.replace(/[^a-zA-Z0-9_]/g, '_');
+      const dfStart = `DF_${tblSafe}_${startCol}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      const dfEnd = `DF_${tblSafe}_${endCol}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      return [
+        `ALTER TABLE ${sch}.${tbl}`,
+        'ADD',
+        `    ${startCol} DATETIME2(${precS})`,
+        '        GENERATED ALWAYS AS ROW START',
+        '        HIDDEN',
+        '        NOT NULL',
+        `        CONSTRAINT ${dfStart}`,
+        '        DEFAULT SYSUTCDATETIME(),',
+        '',
+        `    ${endCol} DATETIME2(${precE})`,
+        '        GENERATED ALWAYS AS ROW END',
+        '        HIDDEN',
+        '        NOT NULL',
+        `        CONSTRAINT ${dfEnd}`,
+        "        DEFAULT CONVERT(DATETIME2(7), '9999-12-31 23:59:59.9999999'),",
+        '',
+        `    PERIOD FOR SYSTEM_TIME (${startCol}, ${endCol});`
+      ];
     }
 
     function formatNullReplacementSql(value, type) {
@@ -635,9 +802,12 @@
           loadingSamples: false,
           selectedTableKey: '',
           tableFilter: '',
-          onlyWithDiff: false,
+          tableFilterMode: 'all',
           selectedColumns: {},
           columnDefaults: {},
+          columnMappings: {},
+          temporalConfig: {},
+          temporalTouched: false,
           generatedSql: '',
           scriptWarnings: [],
           toastMessage: ''
@@ -669,10 +839,19 @@
           return this.allTableKeys.map(key => {
             const o = this.origemData.tables[key];
             const d = this.destinoData.tables[key];
-            const diffCount = this.countTableDiffs(key);
+            const diff = this.countTableDiffsDetail(key);
             const schema = (o && o.schema) || (d && d.schema) || 'dbo';
             const name = (o && o.name) || (d && d.name) || key.split('.').slice(1).join('.');
-            return { key, schema, name, diffCount };
+            return {
+              key,
+              schema,
+              name,
+              tableScope: diff.tableScope,
+              diffCount: diff.total,
+              origemDiffCount: diff.origem,
+              destOnlyDiffCount: diff.destOnly,
+              bothHasDiffs: diff.bothHasDiffs
+            };
           });
         },
         filteredTables() {
@@ -684,8 +863,23 @@
               t.name.toLowerCase().includes(q)
             );
           }
-          if (this.onlyWithDiff) {
-            list = list.filter(t => t.diffCount > 0);
+          switch (this.tableFilterMode) {
+            case 'both_diff':
+              list = list.filter(t => t.tableScope === 'both' && t.origemDiffCount > 0);
+              break;
+            case 'only_origem':
+              list = list.filter(t => t.tableScope === 'only_origem');
+              break;
+            case 'only_destino':
+              list = list.filter(t => t.tableScope === 'only_destino');
+              break;
+            case 'both_extra_dest':
+              list = list.filter(t =>
+                t.tableScope === 'both' && t.destOnlyDiffCount > 0 && t.origemDiffCount === 0
+              );
+              break;
+            default:
+              break;
           }
           return list;
         },
@@ -707,14 +901,37 @@
             });
           }
 
+          const mappings = this.columnMappings[this.selectedTableKey] || {};
+
           return order.map(columnName => {
             const origem = oTbl ? oTbl.columns[columnName] : null;
-            const destino = dTbl ? dTbl.columns[columnName] : null;
-            const status = compareColumnStatus(origem, destino);
-            const existsInDest = !!(destino);
-            const needsDefault = needsDefaultForColumn(origem, destino, existsInDest);
+            let destino = dTbl ? dTbl.columns[columnName] : null;
+            let status = compareColumnStatus(origem, destino);
+            const mappedDestCol = origem ? mappings[columnName] : '';
+            const mappedOrigemCol = destino && !origem
+              ? this.getMappedOrigem(this.selectedTableKey, columnName)
+              : '';
+            let mapPartner = null;
+            let isRename = false;
+
+            if (mappedDestCol && origem) {
+              isRename = true;
+              status = 'rename';
+              mapPartner = mappedDestCol;
+              destino = dTbl ? dTbl.columns[mappedDestCol] : null;
+            } else if (mappedOrigemCol) {
+              isRename = true;
+              status = 'rename';
+              mapPartner = mappedOrigemCol;
+            }
+
+            const existsInDest = !!(destino && !isRename) || isRename;
+            const needsDefault = !isRename && needsDefaultForColumn(origem, destino, existsInDest);
             let scriptAction = '—';
-            if (this.isSelectedKey(this.selectedTableKey, columnName)) {
+            if (isRename) {
+              scriptAction = this.isRenameSelected(this.selectedTableKey, columnName, mapPartner, !!origem)
+                ? 'sp_rename' : 'sp_rename (sugerido)';
+            } else if (this.isSelectedKey(this.selectedTableKey, columnName)) {
               if (needsDefault) scriptAction = existsInDest ? 'UPDATE+ALTER' : 'ADD+UPDATE+ALTER';
               else scriptAction = existsInDest ? 'ALTER COLUMN' : 'ADD';
             } else if (status === 'missing') {
@@ -722,6 +939,9 @@
             } else if (status === 'diff') {
               scriptAction = needsDefault ? 'UPDATE+ALTER' : 'ALTER (sugerido)';
             }
+
+            const renameOrigemCol = isRename ? (origem ? columnName : mappedOrigemCol) : columnName;
+
             return {
               columnName,
               origem,
@@ -729,7 +949,12 @@
               status,
               scriptAction,
               needsDefault,
-              canSelect: !!origem
+              mapPartner,
+              isRename,
+              renameOrigemCol,
+              canMapFromOrigem: !!origem && (status === 'missing' || status === 'rename'),
+              canMapFromDestino: !origem && !!destino && (status === 'only_dest' || status === 'rename'),
+              canSelect: !!origem || (isRename && !!mappedOrigemCol)
             };
           });
         },
@@ -739,6 +964,21 @@
         },
         someRowsSelectedInTable() {
           return this.comparisonRows.some(r => r.canSelect && this.isSelected(r));
+        },
+        selectedDatetime2Cols() {
+          return this.getSelectedDatetime2ColsForTable(this.selectedTableKey);
+        },
+        selectedDatetime2Count() {
+          return this.selectedDatetime2Cols.length;
+        },
+        temporalStart() {
+          return this.getTemporalCfg(this.selectedTableKey).start || '';
+        },
+        temporalEnd() {
+          return this.getTemporalCfg(this.selectedTableKey).end || '';
+        },
+        temporalConfigValid() {
+          return this.isTemporalConfigValid(this.selectedTableKey);
         }
       },
       methods: {
@@ -823,27 +1063,186 @@
           this.selectedTableKey = '';
           this.selectedColumns = {};
           this.columnDefaults = {};
+          this.columnMappings = {};
+          this.temporalConfig = {};
+          this.temporalTouched = false;
           this.generatedSql = '';
           this.scriptWarnings = [];
           this.parseError = '';
         },
-        countTableDiffs(key) {
+        countTableDiffsDetail(key) {
           const oTbl = this.origemData.tables[key];
           const dTbl = this.destinoData.tables[key];
-          if (!oTbl) return 0;
-          let n = 0;
+          const empty = {
+            tableScope: 'none',
+            origem: 0,
+            destOnly: 0,
+            total: 0,
+            bothHasDiffs: false
+          };
+          if (!oTbl && !dTbl) return empty;
+
+          if (oTbl && !dTbl) {
+            const n = oTbl.columnOrder.length;
+            return {
+              tableScope: 'only_origem',
+              origem: n,
+              destOnly: 0,
+              total: n,
+              bothHasDiffs: false
+            };
+          }
+          if (!oTbl && dTbl) {
+            const n = dTbl.columnOrder.length;
+            return {
+              tableScope: 'only_destino',
+              origem: 0,
+              destOnly: n,
+              total: n,
+              bothHasDiffs: false
+            };
+          }
+
+          let origem = 0;
+          let destOnly = 0;
+          const mappings = this.columnMappings[key] || {};
+          const mappedOrigem = new Set(Object.keys(mappings));
+          const mappedDest = new Set(Object.values(mappings));
           oTbl.columnOrder.forEach(name => {
+            if (mappedOrigem.has(name)) return;
             const status = compareColumnStatus(
               oTbl.columns[name],
-              dTbl ? dTbl.columns[name] : null
+              dTbl.columns[name] || null
             );
-            if (status === 'missing' || status === 'diff') n++;
+            if (status === 'missing' || status === 'diff') origem++;
           });
-          return n;
+          dTbl.columnOrder.forEach(name => {
+            if (mappedDest.has(name)) return;
+            if (!oTbl.columns[name]) destOnly++;
+          });
+          const total = origem + destOnly;
+          return {
+            tableScope: 'both',
+            origem,
+            destOnly,
+            total,
+            bothHasDiffs: total > 0
+          };
+        },
+        tableDiffBadgeClass(t) {
+          if (this.selectedTableKey === t.key) return 'bg-light text-dark';
+          if (t.tableScope === 'only_origem') return 'bg-info text-dark';
+          if (t.tableScope === 'only_destino') return 'bg-secondary';
+          if (t.tableScope === 'both' && t.origemDiffCount > 0) return 'bg-warning text-dark';
+          if (t.tableScope === 'both' && t.destOnlyDiffCount > 0) return 'bg-primary';
+          return 'bg-secondary';
+        },
+        tableSidebarItemClass(t) {
+          const cls = { active: this.selectedTableKey === t.key };
+          if (t.tableScope === 'only_destino') cls['table-item-only-dest'] = true;
+          else if (t.tableScope === 'only_origem') cls['table-item-only-origem'] = true;
+          else if (t.tableScope === 'both' && t.origemDiffCount > 0) cls['table-item-both-priority'] = true;
+          return cls;
+        },
+        columnNameClass(name) {
+          const n = (name || '').toUpperCase();
+          if (n === 'CD_CONCESSAO' || n === 'CD_AGENCIA') return 'col-name-concessao';
+          return '';
+        },
+        colDefTextClass(col) {
+          if (col && (col.type || '').toLowerCase() === 'datetime2') return 'col-type-datetime2';
+          return '';
+        },
+        getOrigemCol(colName) {
+          const t = this.origemData.tables[this.selectedTableKey];
+          return t ? t.columns[colName] : null;
+        },
+        getDestinoCol(colName) {
+          const t = this.destinoData.tables[this.selectedTableKey];
+          return t ? t.columns[colName] : null;
         },
         selectTable(key) {
           this.selectedTableKey = key;
+          this.temporalTouched = false;
           this.generatedSql = '';
+        },
+        getTemporalCfg(tableKey) {
+          const tk = tableKey || this.selectedTableKey;
+          return this.temporalConfig[tk] || { start: '', end: '' };
+        },
+        setTemporalField(field, value) {
+          const tk = this.selectedTableKey;
+          if (!tk) return;
+          if (!this.temporalConfig[tk]) {
+            this.temporalConfig[tk] = { start: '', end: '' };
+          }
+          this.temporalConfig[tk][field] = value;
+          this.temporalTouched = true;
+        },
+        getSelectedDatetime2ColsForTable(tableKey) {
+          const oTbl = this.origemData.tables[tableKey];
+          if (!oTbl) return [];
+          const prefix = tableKey + '|';
+          const cols = [];
+          Object.keys(this.selectedColumns).forEach(k => {
+            if (!k.startsWith(prefix)) return;
+            const colName = k.slice(prefix.length);
+            const col = oTbl.columns[colName];
+            if (col && isDatetime2Col(col)) cols.push(colName);
+          });
+          return cols.sort();
+        },
+        isTemporalConfigValid(tableKey) {
+          const cols = this.getSelectedDatetime2ColsForTable(tableKey);
+          if (cols.length !== 2) return false;
+          const cfg = this.getTemporalCfg(tableKey);
+          return !!(cfg.start && cfg.end && cfg.start !== cfg.end &&
+            cols.includes(cfg.start) && cols.includes(cfg.end));
+        },
+        getTemporalExcludeCols(tableKey) {
+          const cols = this.getSelectedDatetime2ColsForTable(tableKey);
+          if (cols.length !== 2) return new Set();
+          return new Set(cols);
+        },
+        syncTemporalConfig(tableKey) {
+          const cols = this.getSelectedDatetime2ColsForTable(tableKey);
+          if (!this.temporalConfig[tableKey]) return;
+          if (cols.length !== 2) {
+            this.temporalConfig[tableKey] = { start: '', end: '' };
+            return;
+          }
+          const cfg = this.temporalConfig[tableKey];
+          if (cfg.start && !cols.includes(cfg.start)) cfg.start = '';
+          if (cfg.end && !cols.includes(cfg.end)) cfg.end = '';
+        },
+        appendTemporalScript(tableLines, tableKey, warnings) {
+          const cols = this.getSelectedDatetime2ColsForTable(tableKey);
+          if (cols.length !== 2) return 0;
+          if (!this.isTemporalConfigValid(tableKey)) {
+            warnings.push(
+              `[${tableKey}]: selecione Temporal Inicial e Temporal Final (2 colunas datetime2).`
+            );
+            return 0;
+          }
+          const oTbl = this.origemData.tables[tableKey];
+          if (!oTbl) return 0;
+          const cfg = this.getTemporalCfg(tableKey);
+          const startDef = oTbl.columns[cfg.start];
+          const endDef = oTbl.columns[cfg.end];
+          this.pushScriptSection(
+            tableLines,
+            `System-Time: [${cfg.start}] (início) / [${cfg.end}] (fim)`
+          );
+          tableLines.push(...buildTemporalSystemTimeLines(
+            oTbl.schema,
+            oTbl.name,
+            cfg.start,
+            cfg.end,
+            startDef,
+            endDef
+          ));
+          tableLines.push('GO');
+          return 1;
         },
         selectionKey(tableKey, columnName) {
           return tableKey + '|' + columnName;
@@ -852,6 +1251,14 @@
           return !!this.selectedColumns[this.selectionKey(tableKey, columnName)];
         },
         isSelected(row) {
+          if (row.isRename) {
+            return this.isRenameSelected(
+              this.selectedTableKey,
+              row.columnName,
+              row.mapPartner,
+              !!row.origem
+            );
+          }
           return this.isSelectedKey(this.selectedTableKey, row.columnName);
         },
         defaultKey(tableKey, columnName) {
@@ -868,25 +1275,104 @@
         getDefaultForColumn(tableKey, colName) {
           return this.columnDefaults[this.defaultKey(tableKey, colName)] || '';
         },
-        toggleSelect(row, checked) {
-          const k = this.selectionKey(this.selectedTableKey, row.columnName);
-          if (checked) {
-            this.selectedColumns[k] = true;
-          } else {
-            delete this.selectedColumns[k];
+        getTableMappings(tableKey) {
+          return this.columnMappings[tableKey] || {};
+        },
+        getMappedDestino(tableKey, origemCol) {
+          return this.getTableMappings(tableKey)[origemCol] || '';
+        },
+        getMappedOrigem(tableKey, destinoCol) {
+          const m = this.getTableMappings(tableKey);
+          return Object.keys(m).find(k => m[k] === destinoCol) || '';
+        },
+        setMapping(tableKey, origemCol, destinoCol) {
+          if (!this.columnMappings[tableKey]) {
+            this.columnMappings[tableKey] = {};
+          }
+          const m = this.columnMappings[tableKey];
+          Object.keys(m).forEach(k => {
+            if (m[k] === destinoCol) delete m[k];
+          });
+          if (origemCol && destinoCol) {
+            m[origemCol] = destinoCol;
+            const selKey = this.selectionKey(tableKey, origemCol);
+            const renameKey = this.renameSelectionKey(tableKey, origemCol);
+            if (this.selectedColumns[selKey] || this.selectedColumns[renameKey]) {
+              this.selectedColumns[renameKey] = true;
+            }
+            delete this.columnDefaults[this.defaultKey(tableKey, origemCol)];
+          } else if (origemCol) {
+            delete m[origemCol];
           }
         },
+        setMappingFromDestino(tableKey, destinoCol, origemCol) {
+          if (origemCol) this.setMapping(tableKey, origemCol, destinoCol);
+          else {
+            const prev = this.getMappedOrigem(tableKey, destinoCol);
+            if (prev) this.setMapping(tableKey, prev, '');
+          }
+        },
+        destCandidatesForOrigem(row) {
+          const dTbl = this.destinoData.tables[this.selectedTableKey];
+          const oTbl = this.origemData.tables[this.selectedTableKey];
+          if (!dTbl || !oTbl) return [];
+          const m = this.getTableMappings(this.selectedTableKey);
+          const usedDest = new Set(Object.values(m));
+          const current = m[row.columnName];
+          return dTbl.columnOrder.filter(name => {
+            if (oTbl.columns[name]) return false;
+            if (usedDest.has(name) && name !== current) return false;
+            return true;
+          });
+        },
+        origemCandidatesForDestino(row) {
+          const dTbl = this.destinoData.tables[this.selectedTableKey];
+          const oTbl = this.origemData.tables[this.selectedTableKey];
+          if (!dTbl || !oTbl) return [];
+          const m = this.getTableMappings(this.selectedTableKey);
+          const usedOrigem = new Set(Object.keys(m));
+          const current = this.getMappedOrigem(this.selectedTableKey, row.columnName);
+          return oTbl.columnOrder.filter(name => {
+            if (dTbl.columns[name]) return false;
+            if (usedOrigem.has(name) && name !== current) return false;
+            return true;
+          });
+        },
+        renameSelectionKey(tableKey, origemCol) {
+          return tableKey + '|' + origemCol;
+        },
+        isRenameSelected(tableKey, columnName, mapPartner, hasOrigem) {
+          const origemCol = hasOrigem ? columnName : mapPartner;
+          return !!this.selectedColumns[this.renameSelectionKey(tableKey, origemCol)];
+        },
+        toggleSelect(row, checked) {
+          const tableKey = this.selectedTableKey;
+          const selKey = row.isRename && !row.origem
+            ? this.renameSelectionKey(tableKey, row.renameOrigemCol)
+            : this.selectionKey(tableKey, row.renameOrigemCol || row.columnName);
+          if (checked) this.selectedColumns[selKey] = true;
+          else delete this.selectedColumns[selKey];
+          this.syncTemporalConfig(tableKey);
+        },
         toggleAllInTable(checked) {
+          const seenRename = new Set();
           this.comparisonRows.forEach(row => {
             if (!row.canSelect) return;
-            const k = this.selectionKey(this.selectedTableKey, row.columnName);
-            if (checked) this.selectedColumns[k] = true;
-            else delete this.selectedColumns[k];
+            let selKey;
+            if (row.isRename) {
+              if (seenRename.has(row.renameOrigemCol)) return;
+              seenRename.add(row.renameOrigemCol);
+              selKey = this.renameSelectionKey(this.selectedTableKey, row.renameOrigemCol);
+            } else {
+              selKey = this.selectionKey(this.selectedTableKey, row.columnName);
+            }
+            if (checked) this.selectedColumns[selKey] = true;
+            else delete this.selectedColumns[selKey];
           });
         },
         selectMissingInTable() {
           this.comparisonRows.forEach(row => {
-            if (row.status === 'missing') {
+            if (row.status === 'missing' && !row.isRename) {
               this.selectedColumns[this.selectionKey(this.selectedTableKey, row.columnName)] = true;
             }
           });
@@ -898,6 +1384,7 @@
           });
         },
         rowRowClass(row) {
+          if (row.status === 'rename') return 'row-rename';
           if (row.status === 'missing') return 'row-missing';
           if (row.status === 'diff') return 'row-diff';
           if (row.status === 'only_dest') return 'row-only-dest';
@@ -908,6 +1395,7 @@
             missing: 'Falta no destino',
             diff: 'Diferente',
             only_dest: 'Só no destino',
+            rename: 'Renomear',
             same: 'Igual'
           };
           return map[status] || status;
@@ -917,9 +1405,31 @@
             missing: 'bg-warning text-dark',
             diff: 'bg-info text-dark',
             only_dest: 'bg-secondary',
+            rename: 'bg-primary',
             same: 'bg-success'
           };
           return map[status] || 'bg-secondary';
+        },
+        pushScriptSection(lines, title) {
+          const bar = '-- ' + '-'.repeat(72);
+          lines.push('');
+          lines.push(bar);
+          lines.push(`-- ${title}`);
+          lines.push(bar);
+        },
+        buildSpRenameLine(schema, table, destinoCol, origemCol) {
+          return `EXEC sp_rename '${schema}.${table}.${destinoCol}', '${origemCol}', 'COLUMN';`;
+        },
+        getSelectedRenamesForTable(tableKey) {
+          const m = this.getTableMappings(tableKey);
+          const items = [];
+          Object.keys(m).forEach(origemCol => {
+            const destinoCol = m[origemCol];
+            if (!destinoCol) return;
+            if (!this.selectedColumns[this.renameSelectionKey(tableKey, origemCol)]) return;
+            items.push({ origemCol, destinoCol });
+          });
+          return items.sort((a, b) => a.origemCol.localeCompare(b.origemCol));
         },
         formatColDef(col) {
           let s = buildTypeSql(col);
@@ -964,7 +1474,6 @@
               return 0;
             }
             const typeSql = buildTypeSql(col);
-            tableLines.push(`-- [${colName}]: origem NOT NULL, destino NULL — preencher e alterar para NOT NULL`);
             if (!existsInDest) {
               tableLines.push(this.buildAddLine(col, qTable, true));
               tableLines.push('GO');
@@ -991,11 +1500,14 @@
           const prefix = tableKey + '|';
           const oTbl = this.origemData.tables[tableKey];
           const items = [];
+          const temporalExclude = this.getTemporalExcludeCols(tableKey);
           if (!oTbl) return items;
           Object.keys(this.selectedColumns).forEach(k => {
             if (!k.startsWith(prefix)) return;
             const colName = k.slice(prefix.length);
             if (!oTbl.columns[colName]) return;
+            if (this.getMappedDestino(tableKey, colName)) return;
+            if (temporalExclude.has(colName)) return;
             const dTbl = this.destinoData.tables[tableKey];
             const col = oTbl.columns[colName];
             const destCol = dTbl ? dTbl.columns[colName] : null;
@@ -1012,12 +1524,21 @@
           this.scriptWarnings = [];
           const lines = [];
           const warnings = [];
+          const tableKeySet = new Set();
+          Object.keys(this.selectedColumns).forEach(k => {
+            const tk = k.split('|')[0];
+            if (tk) tableKeySet.add(tk);
+          });
+          Object.keys(this.columnMappings).forEach(tk => {
+            if (this.getSelectedRenamesForTable(tk).length) tableKeySet.add(tk);
+          });
+          if (this.origemData) {
+            Object.keys(this.origemData.tables).forEach(tk => {
+              if (this.getSelectedDatetime2ColsForTable(tk).length === 2) tableKeySet.add(tk);
+            });
+          }
           const tableKeys = allTables
-            ? [...new Set(
-                Object.keys(this.selectedColumns)
-                  .map(k => k.split('|')[0])
-                  .filter(Boolean)
-              )].sort()
+            ? [...tableKeySet].sort()
             : (this.selectedTableKey ? [this.selectedTableKey] : []);
 
           if (!tableKeys.length) {
@@ -1027,9 +1548,16 @@
 
           let totalStatements = 0;
 
+          if (this.selectedTableKey && this.selectedDatetime2Count === 2) {
+            this.temporalTouched = true;
+          }
+
           tableKeys.forEach(tableKey => {
             const selected = this.getSelectedForTable(tableKey);
-            if (!selected.length) return;
+            const renames = this.getSelectedRenamesForTable(tableKey);
+            const hasTemporal = this.getSelectedDatetime2ColsForTable(tableKey).length === 2;
+
+            if (!selected.length && !renames.length && !hasTemporal) return;
 
             const oTbl = this.origemData.tables[tableKey];
             if (!oTbl) return;
@@ -1038,7 +1566,22 @@
             const tableLines = [];
 
             tableLines.push(`-- ${tableKey}`);
+
+            renames.forEach(({ origemCol, destinoCol }) => {
+              this.pushScriptSection(
+                tableLines,
+                `Renomear coluna: [${destinoCol}] → [${origemCol}]`
+              );
+              tableLines.push(this.buildSpRenameLine(oTbl.schema, oTbl.name, destinoCol, origemCol));
+              tableLines.push('GO');
+              totalStatements++;
+            });
+
+            totalStatements += this.appendTemporalScript(tableLines, tableKey, warnings);
+
             selected.forEach(({ colName, col, destCol, existsInDest }) => {
+              const action = existsInDest ? 'ALTER COLUMN' : 'ADD COLUMN';
+              this.pushScriptSection(tableLines, `${action}: [${colName}]`);
               totalStatements += this.appendColumnScript(tableLines, {
                 col,
                 destino: destCol,
