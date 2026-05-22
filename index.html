@@ -337,6 +337,10 @@
             <button type="button" class="btn btn-danger" @click="parseStatsInput" :disabled="!statsRawInput.trim()">
               <i class="fal fa-chart-bar me-1"></i> Analisar estatísticas
             </button>
+            <button type="button" class="btn btn-danger" title="Ler da area de transferencia"
+                    @click="parseStatsInputFromClipboard">
+              <i class="fal fa-clipboard me-1"></i> Analisar Transf
+            </button>
             <button type="button" class="btn btn-outline-secondary" @click="loadStatsSample">
               <i class="fal fa-file-code me-1"></i> Carregar exemplo
             </button>
@@ -514,6 +518,10 @@
           <div class="d-flex flex-wrap gap-2 mt-3">
             <button type="button" class="btn btn-primary" @click="parseInput" :disabled="!rawInput.trim()">
               <i class="fal fa-search me-1"></i> Analisar
+            </button>
+            <button type="button" class="btn btn-primary" title="Ler da area de transferencia"
+                    @click="parseInputFromClipboard">
+              <i class="fal fa-clipboard me-1"></i> Analisar Transf
             </button>
             <button type="button" class="btn btn-outline-secondary" @click="loadSample">
               <i class="fal fa-file-code me-1"></i> Carregar exemplo
@@ -1676,6 +1684,24 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
           this.statsRawInput = SAMPLE_STATISTICS;
           this.statsParseError = '';
         },
+        async parseStatsInputFromClipboard() {
+          this.statsParseError = '';
+          try {
+            const text = await navigator.clipboard.readText();
+            if (!text.trim()) {
+              this.statsParseError = 'Área de transferência vazia. Copie o resultado de STATISTICS IO/TIME antes de clicar.';
+              return;
+            }
+            this.statsRawInput = text;
+            this.parseStatsInput();
+          } catch (e) {
+            if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+              this.statsParseError = 'Não foi possível ler a área de transferência. Permita o acesso ou use Analisar estatísticas após colar no campo acima.';
+            } else {
+              this.statsParseError = e.message || 'Erro ao ler a área de transferência.';
+            }
+          }
+        },
         parseStatsInput() {
           this.statsParseError = '';
           try {
@@ -1695,6 +1721,24 @@ Horário de conclusão: 2026-05-18T18:48:08.5746158-03:00`;
         loadSample() {
           this.rawInput = SAMPLE_SP_HELP;
           this.parseError = '';
+        },
+        async parseInputFromClipboard() {
+          this.parseError = '';
+          try {
+            const text = await navigator.clipboard.readText();
+            if (!text.trim()) {
+              this.parseError = 'Área de transferência vazia. Copie o resultado do sp_help antes de clicar.';
+              return;
+            }
+            this.rawInput = text;
+            this.parseInput();
+          } catch (e) {
+            if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) {
+              this.parseError = 'Não foi possível ler a área de transferência. Permita o acesso ao colar ou use o botão Analisar após colar no campo acima.';
+            } else {
+              this.parseError = e.message || 'Erro ao ler a área de transferência.';
+            }
+          }
         },
         parseInput() {
           this.parseError = '';
