@@ -12,6 +12,7 @@
           destinoFileName: '',
           parseError: '',
           loadingSamples: false,
+          copyingTsvQuery: false,
           selectedTableKey: '',
           tableFilter: '',
           tableFilterMode: 'all',
@@ -230,6 +231,18 @@
             this.parseError = e.message || 'Erro ao ler destino.';
             this.destinoData = null;
             this.destinoFileName = '';
+          }
+        },
+        async copyTsvQuery() {
+          this.copyingTsvQuery = true;
+          try {
+            var text = await SqlHelp.fetchTsvExportQuery();
+            await navigator.clipboard.writeText(text);
+            this.showToast('Query TSV copiada para a área de transferência.');
+          } catch (e) {
+            this.showToast('Não foi possível copiar. Selecione o texto manualmente.');
+          } finally {
+            this.copyingTsvQuery = false;
           }
         },
         async loadSamples() {

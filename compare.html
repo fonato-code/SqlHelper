@@ -49,6 +49,7 @@
           <p class="text-muted small mb-3">
             Formato esperado (tab): <code>TableSchema</code>, <code>TableName</code>, <code>ColumnName</code>,
             <code>Type</code>, <code>Length</code>, <code>Prec</code>, <code>Scale</code>, <code>Nullable</code>, <code>IsIdentity</code>.
+            Execute a query em <code>Querie.sql</code> no SSMS (origem e destino) e exporte o resultado como TSV.
             Exemplos em <code>tsv/origem.tsv</code> e <code>tsv/destino.tsv</code>.
           </p>
           <div class="row g-3">
@@ -79,6 +80,9 @@
             <i class="fal fa-exclamation-triangle me-1"></i> {{ parseError }}
           </div>
           <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="button" class="btn btn-outline-primary btn-sm" @click="copyTsvQuery" :disabled="copyingTsvQuery">
+              <i class="fal fa-copy me-1"></i> Copiar query TSV
+            </button>
             <button type="button" class="btn btn-outline-secondary btn-sm" @click="loadSamples" :disabled="loadingSamples">
               <i class="fal fa-folder-open me-1"></i> Carregar exemplos (tsv/)
             </button>
