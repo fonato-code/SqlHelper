@@ -1,0 +1,47 @@
+.paste-area {
+      min-height: 220px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .col-actions { white-space: nowrap; }
+
+    .table-responsive-columns th {
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+
+    .badge-changed { font-size: 0.7rem; }
+
+    .pk-sortable-list { max-width: 32rem; }
+    .pk-sortable-item {
+      cursor: grab;
+      user-select: none;
+      background: var(--bg-card-header);
+      border-color: var(--border) !important;
+    }
+    .pk-sortable-item:active { cursor: grabbing; }
+    .pk-sortable-item.pk-drag-over {
+      outline: 2px dashed var(--sqlhelp-accent, #0d6efd);
+      outline-offset: 2px;
+    }
+    .pk-grip { color: var(--text-muted); width: 1rem; text-align: center; }
+
+    [data-theme="dark"] .alert-warning {
+      background-color: #3d3216;
+      border-color: #5c4a1a;
+      color: #f5e6b8;
+    }
+
+    [v-cloak] { display: none !important; }
+
+    [data-theme="dark"] .alert-warning {
+      background-color: #3d3216;
+      border-color: #5c4a1a;
+      color: #f5e6b8;
+    }
+
+    [v-cloak] { display: none !important; }
+
+    
