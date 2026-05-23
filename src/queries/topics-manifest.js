@@ -1,0 +1,51 @@
+/**
+ * AUTO-GENERATED — lista de scripts de tópicos para queries.html
+ */
+(function (global) {
+  global.SqlHelp = global.SqlHelp || {};
+  global.SqlHelp.queryTopicScripts = [
+  '<script src="src/queries/topics/ocupacao-atual-do-banco-de-dados-por-tabela.js"><\/script>',
+  '<script src="src/queries/topics/saude-dos-indices-do-banco-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/listagem-e-informacoes-completas-de-indices-da-base-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/listagem-e-informacoes-completas-de-indices-da-base-de-dados-nivel-de-fragmentac.js"><\/script>',
+  '<script src="src/queries/topics/somente-a-fragmentacao-dos-indices.js"><\/script>',
+  '<script src="src/queries/topics/indices-ausentes.js"><\/script>',
+  '<script src="src/queries/topics/lista-todas-as-fks-do-banco-dedados.js"><\/script>',
+  '<script src="src/queries/topics/saude-dos-planos-de-execucao-agurpados-pelas-queires-do-banco-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/buscar-queries-que-utilizam-a-tabela-x.js"><\/script>',
+  '<script src="src/queries/topics/saude-das-procedures-do-banco-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/criar-backup-compactado.js"><\/script>',
+  '<script src="src/queries/topics/quanditade-de-espaco-livre-nos-arquivos-dobanco.js"><\/script>',
+  '<script src="src/queries/topics/quanditade-de-espaco-livre-no-disco-do-servidor.js"><\/script>',
+  '<script src="src/queries/topics/execucoes-de-backup-nos-ultimos-7-dias.js"><\/script>',
+  '<script src="src/queries/topics/estatisticas-que-precisam-ser-tratadas.js"><\/script>',
+  '<script src="src/queries/topics/shrinkfile-em-todas-as-databases.js"><\/script>',
+  '<script src="src/queries/topics/historico-de-processamento-de-cpu.js"><\/script>',
+  '<script src="src/queries/topics/analise-de-memoria-atual-do-servidor.js"><\/script>',
+  '<script src="src/queries/topics/consumo-de-paginas-por-base-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/consumo-de-paginas-por-objeto-da-base-atual.js"><\/script>',
+  '<script src="src/queries/topics/executar-a-limpeza-do-banco-de-dados-do-its4.js"><\/script>',
+  '<script src="src/queries/topics/listagem-de-sessions-atual.js"><\/script>',
+  '<script src="src/queries/topics/quantidade-de-deadlocks-desde-o-inicio-do-banco.js"><\/script>',
+  '<script src="src/queries/topics/tamanho-maximo-de-uma-linha-na-tabela.js"><\/script>',
+  '<script src="src/queries/topics/transformar-tabela-em-classe.js"><\/script>',
+  '<script src="src/queries/topics/analise-de-problema-em-paginas-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/deadlock.js"><\/script>',
+  '<script src="src/queries/topics/criar-usuario-de-banco-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/verifica-quais-databases-um-usuario-tem-acesso.js"><\/script>',
+  '<script src="src/queries/topics/cria-um-script-de-criacao-das-tabelas-de-um-acesso-linked-server.js"><\/script>',
+  '<script src="src/queries/topics/ajuste-de-identity-cache-para-corrigir-saltos-de-identity-no-banco-de-dados.js"><\/script>',
+  '<script src="src/queries/topics/adicionar-permissao-de-acesso-a-uma-database-a-multiplos-usuarios.js"><\/script>',
+  '<script src="src/queries/topics/adicionar-permissao-de-acesso-a-um-usuarios-a-multiplos-databases.js"><\/script>',
+  '<script src="src/queries/topics/tabelas-sem-primarykey-ou-clustered-index-geral-performance.js"><\/script>',
+  '<script src="src/queries/topics/comando-do-excel-para-realcar-linhas-e-colunas.js"><\/script>',
+  '<script src="src/queries/topics/analise-de-indice.js"><\/script>',
+  '<script src="src/queries/topics/lista-bancos-que-possuem-a-tabela-x-tabela.js"><\/script>',
+  '<script src="src/queries/topics/lista-bancos-que-possuem-a-procedure-x-procedure.js"><\/script>',
+  '<script src="src/queries/topics/lista-informacoes-da-tabela.js"><\/script>',
+  '<script src="src/queries/topics/listar-tabelas-sem-primary-key.js"><\/script>',
+  '<script src="src/queries/topics/listar-tabelas-sem-identity.js"><\/script>',
+  '<script src="src/queries/topics/listar-o-uso-das-tabelas-nos-objetos-de-banco.js"><\/script>',
+  '<script src="src/queries/topics/lista-quais-tabelas-utilizam-a-coluna-x-quais-queries-que-utilizam-a-coluna-x.js"><\/script>'
+  ];
+})(typeof window !== 'undefined' ? window : this);

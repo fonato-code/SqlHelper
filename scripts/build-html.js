@@ -18,6 +18,7 @@ function nav(active) {
   const items = [
     { href: 'index.html', id: 'sphelp', label: 'sp_help', icon: 'fa-table' },
     { href: 'stats.html', id: 'stats', label: 'IO / Time', icon: 'fa-tachometer-alt' },
+    { href: 'queries.html', id: 'queries', label: 'Queries', icon: 'fa-book' },
     { href: 'compare.html', id: 'compare', label: 'Comparar TSV', icon: 'fa-columns' }
   ];
   const links = items.map(it => {
