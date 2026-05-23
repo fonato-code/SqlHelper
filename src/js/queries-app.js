@@ -23,7 +23,8 @@
         selectedId: getQueryIdFromUrl(),
         search: '',
         activeTag: '',
-        toastMessage: ''
+        toastMessage: '',
+        paramValues: {}
       };
     },
     computed: {
@@ -58,6 +59,7 @@
       renderedBlocks() {
         var topic = this.selectedTopic;
         if (!topic || !topic.blocks) return [];
+        var self = this;
         return topic.blocks.map(function (block, index) {
           if (block.type === 'md') {
             return {
@@ -66,18 +68,70 @@
               html: SqlHelp.renderMarkdown(block.content)
             };
           }
-          var sql = SqlHelp.normalizeSqlIndent(block.sql || '');
+
+          var templateSql = SqlHelp.normalizeSqlIndent(block.sql || '');
+          var params = SqlHelp.parseQueryParams(templateSql);
+          var valuesMap = {};
+          params.forEach(function (p) {
+            var key = SqlHelp.buildParamKey(topic.id, index, p.name);
+            var stored = self.paramValues[key];
+            valuesMap[p.name] = stored !== undefined ? stored : p.default;
+          });
+
+          var resolvedSql = SqlHelp.applyQueryParams(templateSql, valuesMap);
+          var paramsForUi = params.map(function (p) {
+            return {
+              name: p.name,
+              type: p.type,
+              options: p.options || [],
+              paramKey: SqlHelp.buildParamKey(topic.id, index, p.name),
+              value: valuesMap[p.name]
+            };
+          });
+
           return {
             key: 'sql-' + index,
             type: 'sql',
             title: block.title || '',
-            sql: sql,
-            sqlHtml: SqlHelp.highlightSql(sql)
+            templateSql: templateSql,
+            resolvedSql: resolvedSql,
+            sqlHtml: SqlHelp.highlightSql(resolvedSql),
+            params: paramsForUi
           };
         });
       }
     },
+    watch: {
+      selectedId() {
+        this.initParamValues();
+      }
+    },
     methods: {
+      initParamValues() {
+        var topic = this.selectedTopic;
+        if (!topic || !topic.blocks) {
+          this.paramValues = {};
+          return;
+        }
+        var values = {};
+        topic.blocks.forEach(function (block, blockIndex) {
+          if (block.type !== 'sql') return;
+          var sql = SqlHelp.normalizeSqlIndent(block.sql || '');
+          var params = SqlHelp.parseQueryParams(sql);
+          params.forEach(function (p) {
+            var key = SqlHelp.buildParamKey(topic.id, blockIndex, p.name);
+            values[key] = p.default;
+          });
+        });
+        this.paramValues = values;
+      },
+      setParamValue(key, value) {
+        this.paramValues = Object.assign({}, this.paramValues, (function () {
+          var o = {};
+          o[key] = value;
+          return o;
+        })());
+      },
       selectTopic(topic) {
         this.selectedId = topic.id;
         setQueryIdInUrl(topic.id);
@@ -103,6 +157,7 @@
         this.selectedId = this.topics[0].id;
         setQueryIdInUrl(this.selectedId);
       }
+      this.initParamValues();
     },
     mixins: [SqlHelp.themeMixin]
   }).mount('#app');

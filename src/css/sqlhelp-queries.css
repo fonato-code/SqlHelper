@@ -129,6 +129,21 @@
   border-radius: 0.2rem;
 }
 
+.query-params {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--bg-card-header);
+}
+
+.query-params-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
 .query-sql-block {
   margin-bottom: 1.25rem;
 }

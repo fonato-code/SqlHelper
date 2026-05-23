@@ -7,7 +7,7 @@
     tags: ["TABELA"],
     blocks: [
       { type: 'sql', title: `Query`, sql: `
-			DECLARE @Tabela NVARCHAR(300) = 'dbo.ano';
+			DECLARE @Tabela NVARCHAR(300) = @@{string:dbo.ano:Tabela};
 
 			DECLARE @SchemaName SYSNAME = PARSENAME(@Tabela, 2);
 			DECLARE @TableName  SYSNAME = PARSENAME(@Tabela, 1);

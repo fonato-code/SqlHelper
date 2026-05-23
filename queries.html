@@ -103,9 +103,37 @@
                       <span v-if="block.title" class="query-sql-title">{{ block.title }}</span>
                       <span v-else></span>
                       <button type="button" class="btn btn-sm btn-outline-primary"
-                              @click="copySql(block.sql)">
+                              @click="copySql(block.resolvedSql)">
                         <i class="fal fa-copy me-1"></i> Copiar
                       </button>
+                    </div>
+                    <div v-if="block.params && block.params.length" class="query-params">
+                      <div class="query-params-title small text-muted mb-2">Parâmetros</div>
+                      <div v-for="p in block.params" :key="p.paramKey" class="row g-2 mb-2 align-items-center">
+                        <label class="col-sm-3 col-form-label col-form-label-sm mb-0"
+                               :for="p.paramKey">{{ p.name }}</label>
+                        <div class="col-sm-9">
+                          <input v-if="p.type === 'number'"
+                                 :id="p.paramKey"
+                                 type="number"
+                                 class="form-control form-control-sm"
+                                 :value="paramValues[p.paramKey]"
+                                 @input="setParamValue(p.paramKey, $event.target.value)">
+                          <select v-else-if="p.type === 'array'"
+                                  :id="p.paramKey"
+                                  class="form-select form-select-sm"
+                                  :value="paramValues[p.paramKey]"
+                                  @change="setParamValue(p.paramKey, $event.target.value)">
+                            <option v-for="opt in p.options" :key="opt" :value="opt">{{ opt }}</option>
+                          </select>
+                          <input v-else
+                                 :id="p.paramKey"
+                                 type="text"
+                                 class="form-control form-control-sm"
+                                 :value="paramValues[p.paramKey]"
+                                 @input="setParamValue(p.paramKey, $event.target.value)">
+                        </div>
+                      </div>
                     </div>
                     <pre class="query-sql-pre"><code class="language-sql hljs" v-html="block.sqlHtml"></code></pre>
                   </div>
@@ -135,6 +163,7 @@
   <script src="src/js/marked.min.js"></script>
   <script src="src/js/highlight.min.js"></script>
   <script src="src/js/sqlhelp-markdown.js"></script>
+  <script src="src/js/sqlhelp-query-params.js"></script>
   <script src="src/queries/topics-manifest.js"></script>
   <script src="src/queries/load-topics.js"></script>
   <script src="src/queries/catalog.js"></script>

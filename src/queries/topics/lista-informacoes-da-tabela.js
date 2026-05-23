@@ -7,7 +7,7 @@
     tags: [],
     blocks: [
       { type: 'sql', title: `Query`, sql: `
-            declare @teste  varchar(100)= 'dbo.GRAVIDADE'
+            declare @teste  varchar(100)= @@{string:dbo.GRAVIDADE:teste}
 
             DECLARE @Schema SYSNAME;
             DECLARE @Tabela SYSNAME;
