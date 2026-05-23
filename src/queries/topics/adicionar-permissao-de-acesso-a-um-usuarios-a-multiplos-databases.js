@@ -6,50 +6,52 @@
     title: "Adicionar permissão de acesso a um usuarios a multiplos databases",
     tags: ["GERAL"],
     blocks: [
-      { type: 'sql', title: `Query`, sql: `use master 
-go
-DECLARE @Login SYSNAME = N'irio.oliveira';
+      { type: 'sql', title: `Query`, sql: `
+        use master 
+        go
+        DECLARE @Login SYSNAME = N'irio.oliveira';
 
-DECLARE @Bancos TABLE (Nome SYSNAME NOT NULL PRIMARY KEY);
-INSERT INTO @Bancos (Nome)
-VALUES
-(N'TOR2_DEV'),
-(N'TOR_CART_DEV');  -- <-- adicione/remova aqui
+        DECLARE @Bancos TABLE (Nome SYSNAME NOT NULL PRIMARY KEY);
+        INSERT INTO @Bancos (Nome)
+        VALUES
+        (N'TOR2_DEV'),
+        (N'TOR_CART_DEV');  -- <-- adicione/remova aqui
 
-DECLARE @Db SYSNAME, @Sql NVARCHAR(MAX);
+        DECLARE @Db SYSNAME, @Sql NVARCHAR(MAX);
 
-DECLARE cur CURSOR FAST_FORWARD FOR
-SELECT Nome FROM @Bancos;
+        DECLARE cur CURSOR FAST_FORWARD FOR
+        SELECT Nome FROM @Bancos;
 
-OPEN cur;
-FETCH NEXT FROM cur INTO @Db;
+        OPEN cur;
+        FETCH NEXT FROM cur INTO @Db;
 
-WHILE @@FETCH_STATUS = 0
-BEGIN
-    SET @Sql = N'
-    USE ' + QUOTENAME(@Db) + N';
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SET @Sql = N'
+            USE ' + QUOTENAME(@Db) + N';
 
-    IF NOT EXISTS (
-        SELECT 1
-        FROM sys.database_principals
-        WHERE name = @Login
-    )
-    BEGIN
-        CREATE USER ' + QUOTENAME(@Login) + N' FOR LOGIN ' + QUOTENAME(@Login) + N';
-    END
+            IF NOT EXISTS (
+                SELECT 1
+                FROM sys.database_principals
+                WHERE name = @Login
+            )
+            BEGIN
+                CREATE USER ' + QUOTENAME(@Login) + N' FOR LOGIN ' + QUOTENAME(@Login) + N';
+            END
 
-    -- Permissões (ajuste aqui)
-    ALTER ROLE db_datareader ADD MEMBER ' + QUOTENAME(@Login) + N';
-    ALTER ROLE db_datawriter ADD MEMBER ' + QUOTENAME(@Login) + N';
-    ';
+            -- Permissões (ajuste aqui)
+            ALTER ROLE db_datareader ADD MEMBER ' + QUOTENAME(@Login) + N';
+            ALTER ROLE db_datawriter ADD MEMBER ' + QUOTENAME(@Login) + N';
+            ';
 
-    EXEC sys.sp_executesql @Sql, N'@Login sysname', @Login = @Login;
+            EXEC sys.sp_executesql @Sql, N'@Login sysname', @Login = @Login;
 
-    FETCH NEXT FROM cur INTO @Db;
-END
+            FETCH NEXT FROM cur INTO @Db;
+        END
 
-CLOSE cur;
-DEALLOCATE cur;` },
+        CLOSE cur;
+        DEALLOCATE cur;
+        ` },
       { type: 'md', content: `_________________________________________________________` }
     ]
   };
