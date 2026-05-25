@@ -7,17 +7,17 @@
     tags: [],
     blocks: [
       { type: 'md', content: `\`\`\` VB
-Private Sub Worksheet_SelectionChange(ByVal Target As Range)
-    Cells.FormatConditions.Delete
+        Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+            Cells.FormatConditions.Delete
 
-    With Target.EntireRow.FormatConditions.Add(Type:=xlExpression, Formula1:="=VERDADEIRO")
-        .Interior.Color = RGB(117, 117, 117)
-    End With
+            With Target.EntireRow.FormatConditions.Add(Type:=xlExpression, Formula1:="=VERDADEIRO")
+                .Interior.Color = RGB(117, 117, 117)
+            End With
 
-    With Target.EntireColumn.FormatConditions.Add(Type:=xlExpression, Formula1:="=VERDADEIRO")
-        .Interior.Color = RGB(117, 117, 117)
-    End With
-End Sub
+            With Target.EntireColumn.FormatConditions.Add(Type:=xlExpression, Formula1:="=VERDADEIRO")
+                .Interior.Color = RGB(117, 117, 117)
+            End With
+        End Sub
 
 \`\`\`` }
     ]

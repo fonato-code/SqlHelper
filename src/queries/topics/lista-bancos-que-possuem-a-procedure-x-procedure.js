@@ -25,7 +25,7 @@
 			ORDER BY name
 
 			EXEC sp_executesql @sql` 
-  }
+ 		}
 	]
   };
 })(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);

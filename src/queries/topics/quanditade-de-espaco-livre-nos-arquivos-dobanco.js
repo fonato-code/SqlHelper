@@ -6,14 +6,14 @@
     title: "Quanditade de espaço livre nos arquivos dobanco",
     tags: ["GERAL"],
     blocks: [
-      { type: 'sql', title: `Query`, sql: `	-- Serve para analisar o tamanho de espaço livre antes de fazer um DBCC SHRINKFILE
-	SELECT NAME 
-		,	[Tamanho Total kb] = SIZE
-		,	[Espaco Ocupado kb] = CAST(FILEPROPERTY(NAME, 'SPACEUSED') AS INT)
-		,	[Espaco Livre kb] = SIZE - CAST(FILEPROPERTY(NAME, 'SPACEUSED') AS INT)
-		,	[Paginas Livre] = (SIZE - CAST(FILEPROPERTY(NAME, 'SPACEUSED') AS INT))/8
-	FROM	SYS.DATABASE_FILES;` },
-      { type: 'md', content: `_________________________________________________________` }
+      { type: 'sql', title: `Query`, sql: `
+        -- Serve para analisar o tamanho de espaço livre antes de fazer um DBCC SHRINKFILE
+        SELECT NAME 
+			, [Tamanho Total kb] = SIZE
+			, [Espaco Ocupado kb] = CAST(FILEPROPERTY(NAME, 'SPACEUSED') AS INT)
+			, [Espaco Livre kb] = SIZE - CAST(FILEPROPERTY(NAME, 'SPACEUSED') AS INT)
+			, [Paginas Livre] = (SIZE - CAST(FILEPROPERTY(NAME, 'SPACEUSED') AS INT))/8
+        FROM	SYS.DATABASE_FILES;` }
     ]
   };
 })(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);
