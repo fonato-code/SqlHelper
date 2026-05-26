@@ -19,7 +19,8 @@ function nav(active) {
     { href: 'index.html', id: 'sphelp', label: 'sp_help', icon: 'fa-table' },
     { href: 'stats.html', id: 'stats', label: 'IO / Time', icon: 'fa-tachometer-alt' },
     { href: 'queries.html', id: 'queries', label: 'Queries', icon: 'fa-book' },
-    { href: 'compare.html', id: 'compare', label: 'Comparar TSV', icon: 'fa-columns' }
+    { href: 'compare.html', id: 'compare', label: 'Comparar TSV', icon: 'fa-columns' },
+    { href: 'growth.html', id: 'growth', label: 'Crescimento DB', icon: 'fa-chart-line' }
   ];
   const links = items.map(it => {
     const cls = active === it.id ? 'nav-link active' : 'nav-link';

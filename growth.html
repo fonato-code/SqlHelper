@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="src/js/sqlhelp-theme.js"></script>
+  <link href="src/css/bootsrtap-v5.3.8.css" rel="stylesheet">
+  <link href="src/fontawesome5pro/fontawesome-pro-5.8.2.css" rel="stylesheet">
+  <link href="src/css/sqlhelp-common.css" rel="stylesheet">
+  <link href="src/css/sqlhelp-growth.css" rel="stylesheet">
+  <title>SqlHelp — Crescimento DB</title>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header class="app-header py-3 mb-4 shadow-sm">
+      <div class="container-fluid px-4">
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <i class="fal fa-chart-line fa-2x"></i>
+          <div class="flex-grow-1 min-width-0">
+            <h1 class="h4 mb-0">SqlHelp — Crescimento DB</h1>
+            <p class="mb-0 small opacity-75">Projeção de tamanho por tabela a partir do esquema (<code class="text-white">.log</code> do SSMS)</p>
+          </div>
+          <nav class="sqlhelp-nav me-2">
+            <ul class="nav nav-pills gap-1 mb-0 flex-wrap justify-content-end">
+            <li class="nav-item"><a href="index.html" class="nav-link"><i class="fal fa-table me-1"></i>sp_help</a></li>
+            <li class="nav-item"><a href="stats.html" class="nav-link"><i class="fal fa-tachometer-alt me-1"></i>IO / Time</a></li>
+            <li class="nav-item"><a href="queries.html" class="nav-link"><i class="fal fa-book me-1"></i>Queries</a></li>
+            <li class="nav-item"><a href="compare.html" class="nav-link"><i class="fal fa-columns me-1"></i>Comparar TSV</a></li>
+            <li class="nav-item"><a href="growth.html" class="nav-link active"><i class="fal fa-chart-line me-1"></i>Crescimento DB</a></li>
+            </ul>
+          </nav>
+          <button type="button" class="btn btn-sm theme-toggle-btn"
+                  @click="toggleTheme"
+                  :title="theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'">
+            <i class="fal" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+            <span class="ms-1 d-none d-sm-inline">{{ theme === 'dark' ? 'Claro' : 'Escuro' }}</span>
+          </button>
+        </div>
+      </div>
+    </header>
+    <main class="container-fluid px-4 pb-5">
+
+      <section class="card shadow-sm mb-4">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="fal fa-file-import section-icon text-primary"></i>
+          <strong>Importar arquivo de esquema</strong>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Formato tab-delimitado (SSMS → Results to File): <code>RecordType</code> (<code>COL</code> / <code>IDX</code>),
+            colunas, tipos e índices. Execute <code>QuerieCrescimento.sql</code> no banco e salve como <code>.log</code>.
+            Cenários para <code>varchar</code>/<code>nvarchar</code>: mínimo (1 caractere), médio (5 ou menos) e máximo (tamanho declarado).
+          </p>
+          <div class="row g-3 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label small fw-semibold">
+                <i class="fal fa-file-alt text-info me-1"></i> Arquivo .log / .tsv / .txt
+              </label>
+              <input type="file" class="form-control form-control-sm" accept=".log,.tsv,.txt"
+                     @change="onFile($event)">
+              <div v-if="fileName" class="small text-muted mt-1">
+                <i class="fal fa-check text-success me-1"></i>{{ fileName }}
+                — {{ importStats.tables }} tabelas, {{ importStats.columns }} colunas,
+                {{ importStats.indexes }} índices
+              </div>
+            </div>
+          </div>
+          <div v-if="parseError" class="alert alert-danger mt-3 mb-0 small">
+            <i class="fal fa-exclamation-triangle me-1"></i> {{ parseError }}
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button type="button" class="btn btn-outline-primary btn-sm" @click="copyExportQuery" :disabled="copyingQuery">
+              <i class="fal fa-copy me-1"></i> Copiar query de exportação
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @click="loadSample" :disabled="loadingSample">
+              <i class="fal fa-folder-open me-1"></i> Carregar exemplo
+            </button>
+            <button v-if="ready" type="button" class="btn btn-outline-secondary btn-sm" @click="resetAll">
+              <i class="fal fa-times me-1"></i> Limpar
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <template v-if="ready">
+        <section class="card shadow-sm mb-4">
+          <div class="card-header d-flex align-items-center gap-2">
+            <i class="fal fa-database section-icon text-success"></i>
+            <strong>Resumo do banco (todas as tabelas)</strong>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0 mono growth-summary-table">
+                <thead class="table-light">
+                  <tr>
+                    <th>Cenário</th>
+                    <th class="text-end">1.000 linhas</th>
+                    <th class="text-end">10.000 linhas</th>
+                    <th class="text-end">1.000.000 linhas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in dbTotalsRows" :key="row.scenario"
+                      :class="'growth-scenario-' + row.scenario">
+                    <td class="fw-semibold">{{ row.label }}</td>
+                    <td v-for="p in row.projections" :key="p.target" class="text-end">
+                      <span :class="{ 'growth-capped': p.capped }"
+                            :title="p.capped ? 'Alguma tabela limitada pelo tipo da PK' : ''">
+                        {{ formatBytes(p.totalBytes) }}<span v-if="p.capped">*</span>
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small text-muted px-3 py-2 mb-0 border-top">
+              <i class="fal fa-info-circle me-1"></i>
+              <span class="growth-capped">*</span> Volume efetivo reduzido pelo limite da PK (ex.: <code>tinyint</code> → 256 linhas).
+              Estimativa de esquema; não inclui compressão, fill factor, LOB off-row nem páginas vazias.
+            </p>
+          </div>
+        </section>
+
+        <div class="row growth-layout g-3">
+          <div class="col-lg-3">
+            <div class="card shadow-sm h-100">
+              <div class="card-header py-2">
+                <strong class="small">Tabelas</strong>
+                <span class="badge bg-secondary ms-1">{{ filteredTables.length }}</span>
+              </div>
+              <div class="card-body p-2">
+                <input type="search" class="form-control form-control-sm mb-2"
+                       v-model="tableFilter" placeholder="Filtrar tabela...">
+                <div class="table-sidebar">
+                  <div class="list-group list-group-flush">
+                    <button v-for="t in filteredTables" :key="t.key" type="button"
+                            class="list-group-item list-group-item-action"
+                            :class="{ active: selectedTableKey === t.key }"
+                            @click="selectTable(t.key)">
+                      <span class="mono d-block">{{ t.schema }}.{{ t.name }}</span>
+                      <span class="small text-muted d-block">
+                        {{ formatBytes(t.bytesPerRow) }}/linha (médio)
+                        <span v-if="t.pkCapped" class="badge badge-pk-warn ms-1">PK</span>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-9">
+            <template v-if="selectedTable">
+              <section class="card shadow-sm mb-3">
+                <div class="card-header">
+                  <i class="fal fa-table section-icon text-primary"></i>
+                  <strong class="mono">{{ selectedTable.key }}</strong>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2 small">
+                    <div class="col-md-6">
+                      <strong>Primary key:</strong>
+                      <span v-if="selectedTable.pk.column" class="mono ms-1">
+                        {{ selectedTable.pk.column }} ({{ selectedTable.pk.type }})
+                      </span>
+                      <span v-else class="text-muted ms-1">não identificada</span>
+                    </div>
+                    <div class="col-md-6">
+                      <strong>Limite de linhas:</strong>
+                      <span class="ms-1">{{ pkLimitLabel(selectedTable.pk) }}</span>
+                    </div>
+                    <div class="col-12">
+                      <span class="text-muted">{{ selectedTable.columnCount }} colunas · {{ selectedTable.indexCount }} índices</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card shadow-sm mb-3">
+                <div class="card-header py-2">
+                  <strong class="small">Projeções de tamanho</strong>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 mono growth-summary-table">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Cenário</th>
+                          <th class="text-end">Bytes/linha</th>
+                          <th class="text-end">1.000</th>
+                          <th class="text-end">10.000</th>
+                          <th class="text-end">1.000.000</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="sc in ['min','media','max']" :key="sc"
+                            :class="'growth-scenario-' + sc">
+                          <td class="fw-semibold">{{ scenarioLabel(sc) }}</td>
+                          <td class="text-end">
+                            <button type="button" class="btn btn-link btn-sm p-0 mono growth-bytes-link"
+                                    :class="'growth-scenario-' + sc"
+                                    title="Ver detalhamento da soma"
+                                    @click="openRowBreakdown(sc)">
+                              {{ formatBytes(selectedTable.scenarios[sc].bytesPerRow) }}
+                              <i class="fal fa-search-plus ms-1 small opacity-75"></i>
+                            </button>
+                          </td>
+                          <td v-for="target in [1000, 10000, 1000000]" :key="target" class="text-end">
+                            <span :class="{ 'growth-capped': projectionCell(selectedTable, sc, target).capped }"
+                                  :title="projectionCell(selectedTable, sc, target).capped
+                                    ? 'Efetivo: ' + projectionCell(selectedTable, sc, target).effective.toLocaleString('pt-BR') + ' linhas'
+                                    : ''">
+                              {{ formatBytes(projectionCell(selectedTable, sc, target).bytes) }}
+                              <span v-if="projectionCell(selectedTable, sc, target).capped">*</span>
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+
+              <section v-if="selectedRowLayout" class="card shadow-sm mb-3">
+                <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <strong class="small">Estrutura de armazenamento (linha / página)</strong>
+                  <button type="button" class="btn btn-outline-secondary btn-sm"
+                          @click="openStructuralLayout">
+                    <i class="fal fa-search-plus me-1"></i> Detalhar layout
+                  </button>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2 mb-3 small">
+                    <div class="col-md-3">
+                      <span class="text-muted d-block">Bytes/linha (estrutura)</span>
+                      <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.totalBytes) }}</span>
+                      <span v-if="selectedRowLayout.exceedsRowLimit" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
+                    </div>
+                    <div class="col-md-3">
+                      <span class="text-muted d-block">Limite in-row</span>
+                      <span class="mono">{{ selectedRowLayout.rowLimitInRow }} B</span>
+                    </div>
+                    <div class="col-md-3">
+                      <span class="text-muted d-block">Página útil</span>
+                      <span class="mono">{{ selectedRowLayout.pageDataBytes }} B</span>
+                    </div>
+                    <div class="col-md-3">
+                      <span class="text-muted d-block">Linhas/página (est.)</span>
+                      <span class="mono">{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }}</span>
+                    </div>
+                  </div>
+                  <div class="growth-type-legend small mb-2">
+                    <span class="growth-type-string">texto</span>
+                    <span class="growth-type-numeric">numérico</span>
+                    <span class="growth-type-datetime">data/hora</span>
+                    <span class="growth-type-binary">binário</span>
+                    <span class="growth-type-guid">guid</span>
+                    <span class="growth-type-other">outro</span>
+                    <span class="growth-col-pk-legend ms-2">PK</span>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 mono growth-columns-table">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Coluna</th>
+                          <th>Tipo</th>
+                          <th>Classe</th>
+                          <th>Modo</th>
+                          <th class="text-end">Bytes na linha</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="col in selectedRowLayout.columns" :key="col.name"
+                            :class="{ 'growth-col-pk': col.isPk }">
+                          <td class="fw-semibold">
+                            <span v-if="col.isPk" class="badge growth-pk-badge me-1">PK</span>{{ col.name }}
+                          </td>
+                          <td class="small"><span :class="col.typeClass">{{ formatTypeLabel(col) }}</span></td>
+                          <td class="small">{{ storageClassLabel(col) }}</td>
+                          <td class="small">
+                            <span class="badge growth-mode-badge" :class="'growth-mode-' + col.storageMode">
+                              {{ storageModeLabel(col.storageMode) }}
+                            </span>
+                          </td>
+                          <td class="text-end fw-semibold">{{ col.bytesInRow }}</td>
+                        </tr>
+                      </tbody>
+                      <tfoot class="table-light">
+                        <tr>
+                          <td colspan="4" class="text-muted">Record header</td>
+                          <td class="text-end">{{ selectedRowLayout.header.total }}</td>
+                        </tr>
+                        <tr>
+                          <td colspan="4" class="text-muted">Null bitmap ({{ selectedRowLayout.nullBitmap.formula }})</td>
+                          <td class="text-end">{{ selectedRowLayout.nullBitmap.bytes }}</td>
+                        </tr>
+                        <tr>
+                          <td colspan="4" class="text-muted">Dados fixos + bits empacotados</td>
+                          <td class="text-end">{{ selectedRowLayout.fixedData.total }}</td>
+                        </tr>
+                        <tr>
+                          <td colspan="4" class="text-muted">Seção variável (contador + offsets + dados)</td>
+                          <td class="text-end">{{ selectedRowLayout.variableSection.total }}</td>
+                        </tr>
+                        <tr>
+                          <td colspan="4" class="fw-semibold">Total linha</td>
+                          <td class="text-end fw-semibold">{{ selectedRowLayout.totalBytes }}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <p class="small text-muted mb-0 mt-2">
+                    <i class="fal fa-info-circle me-1"></i>
+                    Tamanhos declarados no esquema (máximo). Cenários min/médio/máx aplicam-se apenas em
+                    <strong>Projeções de tamanho</strong>. Não inclui compressão, sparse, fill factor nem páginas LOB/overflow externas.
+                  </p>
+                </div>
+              </section>
+
+              <section v-if="selectedNcIndexes.length" class="card shadow-sm mb-3">
+                <div class="card-header py-2">
+                  <strong class="small">Índices nonclustered (estrutura)</strong>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 mono">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Índice</th>
+                          <th>Chave</th>
+                          <th>INCLUDE</th>
+                          <th class="text-end">Bytes/linha</th>
+                          <th style="width:5rem"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="ix in selectedNcIndexes" :key="ix.name">
+                          <td>{{ ix.name }}</td>
+                          <td class="small">{{ ix.keyColumns }}</td>
+                          <td class="small">{{ ix.includeColumns }}</td>
+                          <td class="text-end">{{ formatBytes(ix.bytesPerRow) }}</td>
+                          <td class="text-end">
+                            <button type="button" class="btn btn-link btn-sm p-0"
+                                    @click="openIndexLayout(ix)" title="Detalhar">
+                              <i class="fal fa-search-plus"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p class="small text-muted px-3 py-2 mb-0 border-top">
+                    Índice <strong>clustered</strong> armazena a linha de dados — não somado novamente nos NC.
+                  </p>
+                </div>
+              </section>
+            </template>
+          </div>
+        </div>
+      </template>
+    </main>
+
+    <div class="modal fade" id="rowBreakdownModal" tabindex="-1" aria-labelledby="rowBreakdownModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" v-if="breakdownModal">
+          <div class="modal-header">
+            <h5 class="modal-title mono" id="rowBreakdownModalLabel">
+              <i class="fal fa-layer-group me-1"></i> {{ breakdownModal.title }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"
+                    @click="closeRowBreakdown"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted mb-3">{{ breakdownModal.subtitle }}</p>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <div>
+                <span class="text-muted small">Total bytes/linha</span>
+                <div class="h5 mb-0 mono" :class="breakdownModal.scenarioClass">
+                  {{ formatBytes(breakdownModal.bytesPerRow) }}
+                  <span v-if="breakdownModal.dataLayout.exceedsRowLimit" class="badge bg-warning text-dark ms-1 fs-6">>&nbsp;8060</span>
+                </div>
+              </div>
+              <div v-if="!breakdownModal.structuralOnly" class="small text-muted text-end">
+                Dados: {{ formatBytes(breakdownModal.dataRowBytes) }}
+                · NC: {{ formatBytes(breakdownModal.ncIndexBytesPerRow) }}
+              </div>
+            </div>
+
+            <div v-if="breakdownModal.pk && breakdownModal.pk.column" class="alert alert-secondary py-2 small mb-3">
+              <i class="fal fa-key me-1"></i>
+              <strong>Primary key</strong>
+              <span class="mono ms-1">{{ (breakdownModal.pk.columns && breakdownModal.pk.columns.length ? breakdownModal.pk.columns : [breakdownModal.pk.column]).filter(Boolean).join(', ') }}</span>
+              <span class="text-muted">({{ breakdownModal.pk.type }})</span>
+              <span v-if="breakdownModal.clusteredIndex" class="d-block mt-1">
+                Clustered: <code>{{ breakdownModal.clusteredIndex.name }}</code>
+              </span>
+            </div>
+
+            <template v-if="breakdownModal.dataLayout">
+              <h6 class="small fw-semibold text-uppercase text-muted mb-2">Composição da linha</h6>
+              <div class="table-responsive mb-3">
+                <table class="table table-sm mono mb-0 growth-breakdown-table">
+                  <tbody>
+                    <tr v-for="col in breakdownModal.dataLayout.columns" :key="'m-' + col.name"
+                        :class="{ 'growth-col-pk': col.isPk }">
+                      <td>
+                        <span v-if="col.isPk" class="badge growth-pk-badge me-1">PK</span>{{ col.name }}
+                      </td>
+                      <td><span :class="col.typeClass">{{ col.type }}</span></td>
+                      <td class="small text-muted">{{ storageModeLabel(col.storageMode) }}</td>
+                      <td class="text-end">{{ col.bytesInRow }}</td>
+                    </tr>
+                    <tr class="table-light">
+                      <td colspan="3" class="text-muted">Record header</td>
+                      <td class="text-end">{{ breakdownModal.dataLayout.header.total }}</td>
+                    </tr>
+                    <tr class="table-light">
+                      <td colspan="3" class="text-muted">Null bitmap</td>
+                      <td class="text-end">{{ breakdownModal.dataLayout.nullBitmap.bytes }}</td>
+                    </tr>
+                    <tr class="table-light">
+                      <td colspan="3" class="text-muted">Contador colunas variáveis</td>
+                      <td class="text-end">{{ breakdownModal.dataLayout.variableSection.columnCountField }}</td>
+                    </tr>
+                    <tr class="table-light">
+                      <td colspan="3" class="text-muted">Array de offsets (2 × {{ breakdownModal.dataLayout.variableSection.entries.length }})</td>
+                      <td class="text-end">{{ breakdownModal.dataLayout.variableSection.offsetArrayBytes }}</td>
+                    </tr>
+                    <tr v-if="breakdownModal.dataLayout.fixedData.bitPackedBytes" class="table-light">
+                      <td colspan="3" class="text-muted">Bits empacotados ({{ breakdownModal.dataLayout.fixedData.bitColumns.length }} cols)</td>
+                      <td class="text-end">{{ breakdownModal.dataLayout.fixedData.bitPackedBytes }}</td>
+                    </tr>
+                    <tr class="table-light fw-semibold">
+                      <td colspan="3">Total</td>
+                      <td class="text-end">{{ breakdownModal.dataLayout.totalBytes }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="breakdownModal.dataLayout.lobColumns.length" class="alert alert-info py-2 small">
+                <strong>LOB root (16 B):</strong>
+                {{ breakdownModal.dataLayout.lobColumns.map(c => c.name).join(', ') }}
+              </div>
+              <div v-if="breakdownModal.dataLayout.overflowColumns.length" class="alert alert-warning py-2 small">
+                <strong>Overflow (24 B):</strong>
+                {{ breakdownModal.dataLayout.overflowColumns.map(c => c.name).join(', ') }}
+              </div>
+            </template>
+
+            <template v-if="breakdownModal.ncIndexes && breakdownModal.ncIndexes.length">
+              <h6 class="small fw-semibold text-uppercase text-muted mb-2 mt-3">Índices NC neste cenário</h6>
+              <ul class="small mono mb-0">
+                <li v-for="ix in breakdownModal.ncIndexes" :key="ix.name">
+                  {{ ix.name }}: {{ formatBytes(ix.bytesPerRow) }}/linha
+                </li>
+              </ul>
+            </template>
+
+            <p class="small text-muted mb-0 mt-3">
+              <i class="fal fa-info-circle me-1"></i>
+              Layout conforme record structure do SQL Server (header 12 B, null bitmap, fixos com bits empacotados,
+              seção variável com offsets). Compressão, sparse e cadeias LOB externas não entram no total em disco.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" @click="closeRowBreakdown">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div class="toast align-items-center text-bg-success border-0" ref="toastEl" role="alert">
+        <div class="d-flex">
+          <div class="toast-body">
+            <i class="fal fa-check me-1"></i> {{ toastMessage }}
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="src/js/vue.js"></script>
+  <script src="src/js/bootstrap-v5.3.8.js"></script>
+  <script src="src/js/sqlhelp-sql.js"></script>
+  <script src="src/js/sqlhelp-ui.js"></script>
+  <script src="src/js/sqlhelp-growth-lib.js"></script>
+  <script src="src/js/growth-app.js"></script>
+</body>
+</html>

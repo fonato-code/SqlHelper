@@ -1,0 +1,76 @@
+/* eslint-disable no-console */
+'use strict';
+var path = require('path');
+var fs = require('fs');
+
+global.SqlHelp = {};
+require(path.join(__dirname, '../src/js/sqlhelp-sql.js'));
+require(path.join(__dirname, '../src/js/sqlhelp-growth-lib.js'));
+
+var failed = 0;
+
+function assert(cond, msg) {
+  if (!cond) {
+    console.error('FAIL:', msg);
+    failed++;
+  } else {
+    console.log('OK:', msg);
+  }
+}
+
+function col(name, type, length, prec, scale) {
+  return {
+    name: name,
+    type: type,
+    length: length != null ? length : null,
+    prec: prec != null ? prec : 0,
+    scale: scale != null ? scale : 0,
+    nullable: true,
+    isIdentity: false
+  };
+}
+
+// 8 bit columns => 1 byte packed (not 8)
+var bits = [];
+for (var i = 0; i < 8; i++) bits.push(col('B' + i, 'bit', 1, 1, 0));
+var layoutBits = SqlHelp.computeSqlServerRowLayout(bits, {});
+assert(layoutBits.fixedData.bitPackedBytes === 1, '8 bits => 1 byte packed');
+assert(layoutBits.totalBytes < 30, '8 bits row is small');
+
+// varchar(10) structural max => 12 bytes in variable section (2+10)
+var layoutVarchar = SqlHelp.computeSqlServerRowLayout([col('X', 'varchar', 10)], {});
+var varEntry = layoutVarchar.variableSection.entries[0];
+assert(varEntry.payload === 10, 'varchar(10) payload 10');
+assert(varEntry.bytesInRow === 12, 'varchar(10) in-row 12 bytes');
+
+// varchar(10) min scenario => 3 bytes (2+1)
+var layoutMin = SqlHelp.computeSqlServerRowLayout([col('X', 'varchar', 10)], { scenario: 'min' });
+assert(layoutMin.variableSection.entries[0].bytesInRow === 3, 'varchar(10) min => 3 bytes');
+
+// varchar(max) structural => tries in-row 8000 or lob
+var layoutMax = SqlHelp.computeSqlServerRowLayout([col('L', 'varchar', -1)], {});
+var lobEntry = layoutMax.variableSection.entries[0];
+assert(
+  lobEntry.storageMode === 'lob_root' || lobEntry.payload === 8000,
+  'varchar(max) lob or 8000 in-row attempt'
+);
+
+// Synthetic wide row triggers overflow or lob
+var wideCols = [];
+for (var w = 0; w < 900; w++) {
+  wideCols.push(col('C' + w, 'varchar', 20));
+}
+var layoutWide = SqlHelp.computeSqlServerRowLayout(wideCols, {});
+var hasOffrow = layoutWide.overflowColumns.length > 0 || layoutWide.lobColumns.length > 0;
+assert(hasOffrow || layoutWide.exceedsRowLimit, 'wide table uses overflow/lob or exceeds 8060');
+
+// analyzeTable integration
+var text = fs.readFileSync(path.join(__dirname, '../samples/crescimento-exemplo.log'), 'utf8');
+var parsed = SqlHelp.parseGrowthLog(text, 'test');
+var analysis = SqlHelp.analyzeDatabase(parsed);
+var tiny = analysis.tables.find(function (t) { return t.name === 'EXEMPLO_TINYINT'; });
+assert(tiny.rowLayout.totalBytes > 0, 'rowLayout on table');
+assert(tiny.scenarios.min.dataRowBytes < tiny.scenarios.max.dataRowBytes, 'min < max data row');
+
+console.log(failed ? '\n' + failed + ' test(s) failed' : '\nAll tests passed');
+process.exit(failed ? 1 : 0);
