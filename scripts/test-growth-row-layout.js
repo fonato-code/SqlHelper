@@ -70,6 +70,10 @@ var parsed = SqlHelp.parseGrowthLog(text, 'test');
 var analysis = SqlHelp.analyzeDatabase(parsed);
 var tiny = analysis.tables.find(function (t) { return t.name === 'EXEMPLO_TINYINT'; });
 assert(tiny.rowLayout.totalBytes > 0, 'rowLayout on table');
+assert(typeof tiny.rowLayout.rowSizePotencial === 'number' && tiny.rowLayout.rowSizePotencial > 0, 'rowSizePotencial');
+
+var potOne = SqlHelp.computeRowSizePotencial([col('X', 'varchar', 10)]);
+assert(potOne === 12 + 10 + 1, 'varchar(10) potencial: 12 + overhead 10 + null 1 = 23');
 assert(tiny.scenarios.min.dataRowBytes < tiny.scenarios.max.dataRowBytes, 'min < max data row');
 
 // PAGE_HEADER_FIELDS sum to 96 bytes
@@ -91,6 +95,11 @@ assert(slotMany.slots[1].offsetValue === 196, 'second row contiguous at 96+100')
 var pageDiag = tiny.rowLayout.pageDiagram;
 assert(pageDiag.pageHeaderDetail && pageDiag.pageHeaderDetail.total === 96, 'pageDiagram has header detail');
 assert(pageDiag.slotArrayDetail && pageDiag.slotArrayDetail.slots.length >= 1, 'pageDiagram has slot detail');
+
+assert(SqlHelp.GROWTH_DOCS && SqlHelp.GROWTH_DOCS.sections.length >= 3, 'GROWTH_DOCS sections');
+assert(SqlHelp.getGrowthDoc('storageMode', 'lob_root').url.indexOf('learn.microsoft.com') !== -1, 'LOB doc URL');
+assert(SqlHelp.getGrowthTypeDocUrl('varchar').indexOf('char-and-varchar') !== -1, 'varchar type doc');
+assert(SqlHelp.getGrowthTypeDocUrl('unknown_type_xyz').indexOf('learn.microsoft.com') !== -1, 'fallback type doc');
 
 console.log(failed ? '\n' + failed + ' test(s) failed' : '\nAll tests passed');
 process.exit(failed ? 1 : 0);

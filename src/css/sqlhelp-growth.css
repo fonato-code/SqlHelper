@@ -35,6 +35,24 @@
   color: rgba(255, 255, 255, 0.75) !important;
 }
 
+.growth-table-list-item--alert:not(.active) {
+  border-left: 3px solid #ffc107;
+  background: rgba(255, 193, 7, 0.08);
+}
+
+.growth-table-list-item--alert-active.active {
+  border-left: 3px solid #ffc107;
+}
+
+.growth-table-list-metrics {
+  line-height: 1.35;
+  margin-top: 0.15rem;
+}
+
+[data-theme="light"] .growth-table-list-item--alert:not(.active) {
+  background: rgba(255, 193, 7, 0.12);
+}
+
 .section-icon { width: 1.25rem; text-align: center; }
 
 .growth-summary-table th,
@@ -524,4 +542,47 @@ tr.growth-summary-row > td {
 .growth-slot-table th,
 .growth-slot-table td {
   font-size: 0.72rem;
+}
+
+/* Microsoft Learn documentation links */
+.growth-doc-link {
+  color: var(--sidebar-active, #4dabf7);
+  text-decoration: none;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.growth-doc-link:hover {
+  opacity: 1;
+  color: #74c0fc;
+  text-decoration: none;
+}
+
+.growth-docs-panel {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: rgba(13, 110, 253, 0.06);
+}
+
+.growth-docs-group-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted, #868e96);
+  margin-bottom: 0.35rem;
+}
+
+.growth-docs-links li {
+  margin-bottom: 0.2rem;
+}
+
+.growth-docs-links a {
+  color: var(--sidebar-active, #4dabf7);
+  text-decoration: none;
+}
+
+.growth-docs-links a:hover {
+  text-decoration: underline;
 }

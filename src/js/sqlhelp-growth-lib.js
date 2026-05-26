@@ -235,6 +235,74 @@
     }
   }
 
+  /** Fórmula legada (tópico tamanho máximo de linha): soma CEILING por coluna + overhead fixo. */
+  function getLegacyColumnBytes(col) {
+    var t = (col.type || '').toLowerCase();
+    var maxLen = col.length;
+    var prec = col.prec != null ? col.prec : 18;
+    var scale = col.scale != null ? col.scale : 0;
+    switch (t) {
+      case 'bit': return 0.125;
+      case 'tinyint': return 1;
+      case 'smallint': return 2;
+      case 'int': return 4;
+      case 'bigint': return 8;
+      case 'decimal':
+      case 'numeric':
+        if (prec >= 29) return 17;
+        if (prec >= 20) return 13;
+        if (prec >= 10) return 9;
+        return 5;
+      case 'money': return 8;
+      case 'smallmoney': return 4;
+      case 'real': return 4;
+      case 'float': return prec >= 25 ? 8 : 4;
+      case 'date': return 3;
+      case 'time':
+        if (scale >= 14) return 5;
+        if (scale >= 12) return 4;
+        return 3;
+      case 'datetime2':
+        if (scale < 3) return 6;
+        if (scale < 4) return 7;
+        return 8;
+      case 'datetimeoffset':
+        if (scale >= 32) return 10;
+        if (scale >= 30) return 9;
+        return 8;
+      case 'datetime': return 8;
+      case 'smalldatetime': return 4;
+      case 'timestamp': return 10;
+      case 'binary':
+        return maxLen != null && maxLen > 0 ? maxLen : 1;
+      case 'varbinary':
+        if (maxLen === -1) return INROW_VAR_MAX_PAYLOAD + 2;
+        return (maxLen != null && maxLen > 0 ? maxLen : 1) + 2;
+      case 'char':
+        return maxLen != null && maxLen > 0 ? maxLen : 1;
+      case 'varchar':
+        if (maxLen === -1) return INROW_VAR_MAX_PAYLOAD + 2;
+        return (maxLen != null && maxLen > 0 ? maxLen : 1) + 2;
+      case 'nchar':
+        return (maxLen != null && maxLen > 0 ? maxLen : 1) * 2;
+      case 'nvarchar':
+        if (maxLen === -1) return MAX_NVARCHAR_CHARS * 2 + 2;
+        return (maxLen != null && maxLen > 0 ? maxLen : 1) * 2 + 2;
+      case 'uniqueidentifier': return 16;
+      default: return 8;
+    }
+  }
+
+  function computeRowSizePotencial(columns) {
+    var n = columns.length;
+    if (!n) return 0;
+    var sum = 0;
+    columns.forEach(function (col) {
+      sum += Math.ceil(getLegacyColumnBytes(col));
+    });
+    return sum + 4 + 2 + 2 + 2 + Math.ceil(n / 8);
+  }
+
   function computeRowTotal(nCols, fixedBytes, bitPackedBytes, varEntries) {
     var nullBitmap = Math.ceil(nCols / 8);
     var nVar = varEntries.length;
@@ -266,7 +334,10 @@
         rowsPerPageEstimate: 0,
         pageDataBytes: PAGE_DATA_BYTES,
         rowLimitInRow: ROW_LIMIT_INROW,
-        pkColumnsSum: 0
+        pkColumnsSum: 0,
+        rowSizePotencial: 0,
+        exceedsRowLimitPotencial: false,
+        exceedsPageBody: false
       };
       emptyLayout.rowDiagram = buildRowDiagram(emptyLayout);
       emptyLayout.pageDiagram = buildPageDiagram(emptyLayout);
@@ -384,6 +455,7 @@
 
     var lobColumns = varEntries.filter(function (e) { return e.storageMode === 'lob_root'; });
     var overflowColumns = varEntries.filter(function (e) { return e.storageMode === 'overflow'; });
+    var rowSizePotencial = computeRowSizePotencial(columns);
 
     var layoutResult = {
       scenario: scenario,
@@ -416,6 +488,9 @@
       summaryRows: summaryRows,
       columns: displayColumns.concat(summaryRows),
       totalBytes: total,
+      rowSizePotencial: rowSizePotencial,
+      exceedsRowLimitPotencial: rowSizePotencial > ROW_LIMIT_INROW,
+      exceedsPageBody: rowSizePotencial > PAGE_DATA_BYTES,
       exceedsRowLimit: total > ROW_LIMIT_INROW,
       rowsPerPageEstimate: total > 0 ? Math.floor(PAGE_DATA_BYTES / total) : 0,
       pageDataBytes: PAGE_DATA_BYTES,
@@ -1002,6 +1077,118 @@
     return GROWTH_EXPORT_QUERY;
   }
 
+  var MS = 'https://learn.microsoft.com/en-us/sql/';
+  var MSV = '?view=sql-server-ver17';
+
+  var GROWTH_DOCS = {
+    sections: [
+      {
+        id: 'architecture',
+        title: 'Motor de armazenamento',
+        links: [
+          { id: 'pages', label: 'Páginas e extents (8 KB)', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV,
+            hint: 'Page header, tipos de página, row offset array, LOB e overflow.' },
+          { id: 'indexes', label: 'Design de índices', url: MS + 'relational-databases/sql-server-index-design-guide' + MSV,
+            hint: 'Clustered vs nonclustered e organização das linhas.' },
+          { id: 'capacity', label: 'Limites de capacidade', url: MS + 'sql-server/maximum-capacity-specifications-for-sql-server' + MSV,
+            hint: 'Limite de 8060 bytes por linha in-row, tamanho de página, etc.' }
+        ]
+      },
+      {
+        id: 'rowPage',
+        title: 'Linha e página de dados',
+        links: [
+          { id: 'rowOverflow', label: 'Row-overflow (24 B)', url: MS + 'relational-databases/pages-and-extents-architecture-guide#row-overflow-data-pages' + MSV,
+            hint: 'Colunas que saem da linha para páginas ROW_OVERFLOW_DATA.' },
+          { id: 'lobPages', label: 'Páginas LOB (16 B na linha)', url: MS + 'relational-databases/pages-and-extents-architecture-guide#lob-pages' + MSV,
+            hint: 'Ponteiro LOB na linha; dados grandes em páginas dedicadas.' },
+          { id: 'recordStructure', label: 'Estrutura de registros (record)', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV,
+            hint: 'Record header, null bitmap, seção fixa e variável (visão geral).' },
+          { id: 'largeValues', label: 'Tipos MAX / large values', url: MS + 't-sql/data-types/char-and-varchar-transact-sql#large-value-data-types' + MSV,
+            hint: 'varchar(max), varbinary(max) e armazenamento fora da linha.' }
+        ]
+      },
+      {
+        id: 'types',
+        title: 'Tipos de dados (T-SQL)',
+        links: [
+          { id: 'typesOverview', label: 'Visão geral dos tipos', url: MS + 't-sql/data-types/data-types-transact-sql' + MSV,
+            hint: 'Referência de todos os tipos suportados.' },
+          { id: 'strings', label: 'char / varchar', url: MS + 't-sql/data-types/char-and-varchar-transact-sql' + MSV },
+          { id: 'nstrings', label: 'nchar / nvarchar', url: MS + 't-sql/data-types/nchar-and-nvarchar-transact-sql' + MSV },
+          { id: 'numerics', label: 'int, decimal, float…', url: MS + 't-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql' + MSV },
+          { id: 'binary', label: 'binary / varbinary', url: MS + 't-sql/data-types/binary-and-varbinary-transact-sql' + MSV },
+          { id: 'datetime', label: 'date e time', url: MS + 't-sql/data-types/date-transact-sql' + MSV },
+          { id: 'bit', label: 'bit', url: MS + 't-sql/data-types/bit-transact-sql' + MSV }
+        ]
+      }
+    ],
+    concepts: {
+      pageHeader: { label: 'Page header (96 B)', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV },
+      rowOffsetArray: { label: 'Row offset array', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV },
+      recordHeader: { label: 'Record header', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV },
+      nullBitmap: { label: 'Null bitmap', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV },
+      variableSection: { label: 'Seção variável', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV },
+      inRowLimit: { label: 'Limite in-row (8060 B)', url: MS + 'sql-server/maximum-capacity-specifications-for-sql-server' + MSV },
+      pageSize: { label: 'Página de 8 KB', url: MS + 'relational-databases/pages-and-extents-architecture-guide' + MSV }
+    },
+    storageModes: {
+      inrow: { label: 'Armazenamento in-row', url: MS + 't-sql/data-types/char-and-varchar-transact-sql' + MSV },
+      lob_root: { label: 'Ponteiro LOB (16 B)', url: MS + 'relational-databases/pages-and-extents-architecture-guide#lob-pages' + MSV },
+      overflow: { label: 'Row overflow (24 B)', url: MS + 'relational-databases/pages-and-extents-architecture-guide#row-overflow-data-pages' + MSV },
+      bit_packed: { label: 'Colunas bit empacotadas', url: MS + 't-sql/data-types/bit-transact-sql' + MSV },
+      fixed: { label: 'Coluna de tamanho fixo', url: MS + 't-sql/data-types/data-types-transact-sql' + MSV }
+    }
+  };
+
+  var GROWTH_TYPE_DOC_URLS = {
+    varchar: MS + 't-sql/data-types/char-and-varchar-transact-sql' + MSV,
+    nvarchar: MS + 't-sql/data-types/nchar-and-nvarchar-transact-sql' + MSV,
+    char: MS + 't-sql/data-types/char-and-varchar-transact-sql' + MSV,
+    nchar: MS + 't-sql/data-types/nchar-and-nvarchar-transact-sql' + MSV,
+    text: MS + 't-sql/data-types/char-and-varchar-transact-sql' + MSV,
+    ntext: MS + 't-sql/data-types/nchar-and-nvarchar-transact-sql' + MSV,
+    int: MS + 't-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql' + MSV,
+    bigint: MS + 't-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql' + MSV,
+    smallint: MS + 't-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql' + MSV,
+    tinyint: MS + 't-sql/data-types/int-bigint-smallint-and-tinyint-transact-sql' + MSV,
+    bit: MS + 't-sql/data-types/bit-transact-sql' + MSV,
+    decimal: MS + 't-sql/data-types/decimal-and-numeric-transact-sql' + MSV,
+    numeric: MS + 't-sql/data-types/decimal-and-numeric-transact-sql' + MSV,
+    float: MS + 't-sql/data-types/float-and-real-transact-sql' + MSV,
+    real: MS + 't-sql/data-types/float-and-real-transact-sql' + MSV,
+    money: MS + 't-sql/data-types/money-and-smallmoney-transact-sql' + MSV,
+    smallmoney: MS + 't-sql/data-types/money-and-smallmoney-transact-sql' + MSV,
+    date: MS + 't-sql/data-types/date-transact-sql' + MSV,
+    time: MS + 't-sql/data-types/time-transact-sql' + MSV,
+    datetime: MS + 't-sql/data-types/datetime-transact-sql' + MSV,
+    datetime2: MS + 't-sql/data-types/datetime2-transact-sql' + MSV,
+    smalldatetime: MS + 't-sql/data-types/smalldatetime-transact-sql' + MSV,
+    datetimeoffset: MS + 't-sql/data-types/datetimeoffset-transact-sql' + MSV,
+    binary: MS + 't-sql/data-types/binary-and-varbinary-transact-sql' + MSV,
+    varbinary: MS + 't-sql/data-types/binary-and-varbinary-transact-sql' + MSV,
+    image: MS + 't-sql/data-types/binary-and-varbinary-transact-sql' + MSV,
+    timestamp: MS + 't-sql/data-types/rowversion-transact-sql' + MSV,
+    rowversion: MS + 't-sql/data-types/rowversion-transact-sql' + MSV,
+    uniqueidentifier: MS + 't-sql/data-types/uniqueidentifier-transact-sql' + MSV,
+    xml: MS + 't-sql/data-types/xml-transact-sql' + MSV
+  };
+
+  function getGrowthDoc(category, key) {
+    if (category === 'concept') return GROWTH_DOCS.concepts[key] || null;
+    if (category === 'storageMode') return GROWTH_DOCS.storageModes[key] || null;
+    if (category === 'section') {
+      var sec = GROWTH_DOCS.sections.find(function (s) { return s.id === key; });
+      return sec ? { label: sec.title, url: sec.links[0] && sec.links[0].url } : null;
+    }
+    return null;
+  }
+
+  function getGrowthTypeDocUrl(type) {
+    var t = (type || '').toLowerCase();
+    return GROWTH_TYPE_DOC_URLS[t] || GROWTH_DOCS.sections[2].links[0].url;
+  }
+
   Object.assign(SqlHelp, {
     GROWTH_HEADERS: GROWTH_HEADERS,
     SCENARIOS: SCENARIOS,
@@ -1018,10 +1205,14 @@
     ROW_LIMIT_INROW: ROW_LIMIT_INROW,
     PAGE_HEADER_FIELDS: PAGE_HEADER_FIELDS,
     buildSlotArrayDetail: buildSlotArrayDetail,
+    computeRowSizePotencial: computeRowSizePotencial,
     analyzeTable: analyzeTable,
     analyzeDatabase: analyzeDatabase,
     formatBytes: formatBytes,
     GROWTH_EXPORT_QUERY: GROWTH_EXPORT_QUERY,
-    fetchGrowthExportQuery: fetchGrowthExportQuery
+    fetchGrowthExportQuery: fetchGrowthExportQuery,
+    GROWTH_DOCS: GROWTH_DOCS,
+    getGrowthDoc: getGrowthDoc,
+    getGrowthTypeDocUrl: getGrowthTypeDocUrl
   });
 })(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);

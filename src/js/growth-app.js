@@ -17,12 +17,17 @@
         copyingQuery: false,
         selectedTableKey: '',
         tableFilter: '',
+        tableFilterMode: 'all',
         toastMessage: '',
         breakdownModal: null,
-        breakdownModalInstance: null
+        breakdownModalInstance: null,
+        showGrowthDocs: false
       };
     },
     computed: {
+      growthDocSections() {
+        return SqlHelp.GROWTH_DOCS ? SqlHelp.GROWTH_DOCS.sections : [];
+      },
       ready() {
         return !!(this.parsed && this.analysis);
       },
@@ -38,20 +43,33 @@
         if (!this.analysis) return [];
         return this.analysis.tables.map(function (ta) {
           var pkCap = ta.pk.maxRows != null && 1000000 > ta.pk.maxRows;
+          var rl = ta.rowLayout;
+          var hasSizeAlert = !!(rl.exceedsRowLimitPotencial || rl.exceedsPageBody ||
+            rl.exceedsRowLimit);
           return {
             key: ta.key,
             schema: ta.schema,
             name: ta.name,
-            bytesPerRow: ta.rowLayout.totalBytes,
-            exceedsRowLimit: ta.rowLayout.exceedsRowLimit,
+            bytesPerRow: rl.totalBytes,
+            rowSizePotencial: rl.rowSizePotencial,
+            exceedsRowLimit: rl.exceedsRowLimit,
+            exceedsRowLimitPotencial: rl.exceedsRowLimitPotencial,
+            exceedsPageBody: rl.exceedsPageBody,
+            hasSizeAlert: hasSizeAlert,
             pkCapped: pkCap,
             columnCount: ta.columnCount,
             indexCount: ta.indexCount
           };
         });
       },
+      alertTableCount() {
+        return this.tableSummaries.filter(function (t) { return t.hasSizeAlert; }).length;
+      },
       filteredTables() {
         var list = this.tableSummaries;
+        if (this.tableFilterMode === 'alerts') {
+          list = list.filter(function (t) { return t.hasSizeAlert; });
+        }
         var q = (this.tableFilter || '').trim().toLowerCase();
         if (!q) return list;
         return list.filter(function (t) {
@@ -103,6 +121,12 @@
         if (entry.storageClass === 'lob') return 'LOB';
         if (entry.storageClass === 'variable') return 'Variável';
         return 'Fixa';
+      },
+      growthDoc(category, key) {
+        return SqlHelp.getGrowthDoc(category, key);
+      },
+      growthTypeDocUrl(type) {
+        return SqlHelp.getGrowthTypeDocUrl(type);
       },
       pkLimitLabel(pk) {
         if (pk.maxRows == null) return 'Sem limite prático por tipo';
@@ -190,6 +214,7 @@
         this.analysis = null;
         this.fileName = '';
         this.selectedTableKey = '';
+        this.tableFilterMode = 'all';
         this.parseError = '';
       },
       selectTable(key) {

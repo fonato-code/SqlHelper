@@ -131,15 +131,38 @@
               <div class="card-body p-2">
                 <input type="search" class="form-control form-control-sm mb-2"
                        v-model="tableFilter" placeholder="Filtrar tabela...">
+                <label class="form-label small text-muted mb-1">Exibir tabelas</label>
+                <select class="form-select form-select-sm mb-2" v-model="tableFilterMode">
+                  <option value="all">Todas</option>
+                  <option value="alerts">
+                    Com alerta de tamanho ({{ alertTableCount }})
+                  </option>
+                </select>
                 <div class="table-sidebar">
                   <div class="list-group list-group-flush">
                     <button v-for="t in filteredTables" :key="t.key" type="button"
-                            class="list-group-item list-group-item-action"
-                            :class="{ active: selectedTableKey === t.key }"
+                            class="list-group-item list-group-item-action growth-table-list-item"
+                            :class="{
+                              active: selectedTableKey === t.key,
+                              'growth-table-list-item--alert': t.hasSizeAlert && selectedTableKey !== t.key,
+                              'growth-table-list-item--alert-active': t.hasSizeAlert && selectedTableKey === t.key
+                            }"
                             @click="selectTable(t.key)">
-                      <span class="mono d-block">{{ t.schema }}.{{ t.name }}</span>
-                      <span class="small text-muted d-block">
-                        {{ formatBytes(t.bytesPerRow) }}/linha (médio)
+                      <span class="mono d-block text-truncate">{{ t.schema }}.{{ t.name }}</span>
+                      <span class="small d-block growth-table-list-metrics">
+                        <span class="mono" :class="t.hasSizeAlert ? 'text-warning fw-semibold' : 'text-muted'">
+                          {{ formatBytes(t.rowSizePotencial) }} pot.
+                        </span>
+                        <span class="text-muted mx-1">·</span>
+                        <span class="mono text-muted">{{ formatBytes(t.bytesPerRow) }} estrut.</span>
+                        <span v-if="t.hasSizeAlert" class="badge ms-1"
+                              :class="t.exceedsPageBody ? 'bg-danger' : 'bg-warning text-dark'"
+                              :title="t.exceedsPageBody
+                                ? 'Row_size_potencial maior que o corpo útil da página (8 KB − 96 B)'
+                                : 'Row_size_potencial acima do limite in-row (8060 B)'">
+                          <i class="fal fa-exclamation-triangle"></i>
+                          {{ t.exceedsPageBody ? 'página' : '8060' }}
+                        </span>
                         <span v-if="t.pkCapped" class="badge badge-pk-warn ms-1">PK</span>
                       </span>
                     </button>
@@ -224,27 +247,79 @@
               <section v-if="selectedRowLayout" class="card shadow-sm mb-3">
                 <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
                   <strong class="small">Estrutura de armazenamento (linha / página)</strong>
-                  <button type="button" class="btn btn-outline-secondary btn-sm"
-                          @click="openStructuralLayout">
-                    <i class="fal fa-search-plus me-1"></i> Detalhar layout
-                  </button>
+                  <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-info btn-sm"
+                            @click="showGrowthDocs = !showGrowthDocs"
+                            :aria-expanded="showGrowthDocs">
+                      <i class="fal fa-book me-1"></i>
+                      {{ showGrowthDocs ? 'Ocultar' : 'Documentação' }} MS
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            @click="openStructuralLayout">
+                      <i class="fal fa-search-plus me-1"></i> Detalhar layout
+                    </button>
+                  </div>
                 </div>
                 <div class="card-body">
+                  <div v-show="showGrowthDocs" class="growth-docs-panel mb-3">
+                    <p class="small text-muted mb-2">
+                      Atalhos para a documentação oficial (Microsoft Learn) sobre páginas, linhas, modos de armazenamento e tipos T-SQL.
+                    </p>
+                    <div class="row g-3">
+                      <div v-for="sec in growthDocSections" :key="sec.id" class="col-md-4">
+                        <h6 class="growth-docs-group-title">{{ sec.title }}</h6>
+                        <ul class="list-unstyled small mb-0 growth-docs-links">
+                          <li v-for="link in sec.links" :key="link.id">
+                            <a :href="link.url" target="_blank" rel="noopener noreferrer"
+                               :title="link.hint || link.label">
+                              <i class="fal fa-external-link me-1"></i>{{ link.label }}
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                   <div class="row g-2 mb-3 small">
-                    <div class="col-md-3">
+                    <div class="col-md-3 col-lg">
                       <span class="text-muted d-block">Bytes/linha (estrutura)</span>
                       <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.totalBytes) }}</span>
                       <span v-if="selectedRowLayout.exceedsRowLimit" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
                     </div>
-                    <div class="col-md-3">
-                      <span class="text-muted d-block">Limite in-row</span>
+                    <div class="col-md-3 col-lg">
+                      <span class="text-muted d-block" title="Soma CEILING por coluna (tamanho declarado) + overhead — fórmula do tópico «tamanho máximo de linha»; não aplica ponteiros LOB/overflow.">
+                        Row_size_potencial
+                      </span>
+                      <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.rowSizePotencial) }}</span>
+                      <span v-if="selectedRowLayout.exceedsRowLimitPotencial" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
+                      <span v-else-if="selectedRowLayout.rowSizePotencial > selectedRowLayout.totalBytes"
+                            class="badge bg-secondary ms-1"
+                            title="Maior que o layout estrutural porque assume tudo in-row no máximo declarado">
+                        +{{ formatBytes(selectedRowLayout.rowSizePotencial - selectedRowLayout.totalBytes) }}
+                      </span>
+                    </div>
+                    <div class="col-md-3 col-lg">
+                      <span class="text-muted d-block">
+                        Limite in-row
+                        <a v-if="growthDoc('concept', 'inRowLimit')" class="growth-doc-link ms-1"
+                           :href="growthDoc('concept', 'inRowLimit').url" target="_blank" rel="noopener noreferrer"
+                           :title="'MS Learn: ' + growthDoc('concept', 'inRowLimit').label">
+                          <i class="fal fa-external-link"></i>
+                        </a>
+                      </span>
                       <span class="mono">{{ selectedRowLayout.rowLimitInRow }} B</span>
                     </div>
-                    <div class="col-md-3">
-                      <span class="text-muted d-block">Página útil</span>
+                    <div class="col-md-3 col-lg">
+                      <span class="text-muted d-block">
+                        Página útil
+                        <a v-if="growthDoc('concept', 'pageSize')" class="growth-doc-link ms-1"
+                           :href="growthDoc('concept', 'pageSize').url" target="_blank" rel="noopener noreferrer"
+                           :title="'MS Learn: ' + growthDoc('concept', 'pageSize').label">
+                          <i class="fal fa-external-link"></i>
+                        </a>
+                      </span>
                       <span class="mono">{{ selectedRowLayout.pageDataBytes }} B</span>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-3 col-lg">
                       <span class="text-muted d-block">Linhas/página (est.)</span>
                       <span class="mono">{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }}</span>
                     </div>
@@ -253,6 +328,11 @@
                     <div class="col-lg-5">
                       <h6 class="small fw-semibold text-uppercase text-muted mb-2">
                         <i class="fal fa-layer-group me-1"></i> Estrutura de uma linha
+                        <a v-if="growthDoc('concept', 'recordHeader')" class="growth-doc-link ms-1"
+                           :href="growthDoc('concept', 'recordHeader').url" target="_blank" rel="noopener noreferrer"
+                           :title="'MS Learn: ' + growthDoc('concept', 'recordHeader').label">
+                          <i class="fal fa-external-link"></i>
+                        </a>
                       </h6>
                       <div class="growth-row-diagram">
                         <div v-for="seg in selectedRowLayout.rowDiagram.segments" :key="seg.id"
@@ -285,6 +365,11 @@
                     <div class="col-lg-7">
                       <h6 class="small fw-semibold text-uppercase text-muted mb-2">
                         <i class="fal fa-file-alt me-1"></i> Página de dados (8 KB)
+                        <a v-if="growthDoc('concept', 'pageSize')" class="growth-doc-link ms-1"
+                           :href="growthDoc('concept', 'pageSize').url" target="_blank" rel="noopener noreferrer"
+                           :title="'MS Learn: páginas de dados'">
+                          <i class="fal fa-external-link"></i>
+                        </a>
                       </h6>
                       <div class="growth-page-diagram-wrap">
                         <div class="growth-page-diagram">
@@ -319,6 +404,11 @@
                       <div class="growth-detail-panel">
                         <h6 class="growth-detail-panel-title">
                           <i class="fal fa-info-circle me-1"></i> Page Header (96 B)
+                          <a v-if="growthDoc('concept', 'pageHeader')" class="growth-doc-link ms-1"
+                             :href="growthDoc('concept', 'pageHeader').url" target="_blank" rel="noopener noreferrer"
+                             :title="'MS Learn: ' + growthDoc('concept', 'pageHeader').label">
+                            <i class="fal fa-external-link"></i>
+                          </a>
                         </h6>
                         <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.pageHeaderDetail.note }}</p>
                         <div class="growth-ph-bar" role="img"
@@ -360,6 +450,11 @@
                       <div class="growth-detail-panel" :class="{ 'growth-detail-panel--single-slot': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
                         <h6 class="growth-detail-panel-title">
                           <i class="fal fa-link me-1"></i> Row Offset Array
+                          <a v-if="growthDoc('concept', 'rowOffsetArray')" class="growth-doc-link ms-1"
+                             :href="growthDoc('concept', 'rowOffsetArray').url" target="_blank" rel="noopener noreferrer"
+                             :title="'MS Learn: ' + growthDoc('concept', 'rowOffsetArray').label">
+                            <i class="fal fa-external-link"></i>
+                          </a>
                         </h6>
                         <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.slotArrayDetail.explanation }}</p>
                         <div class="growth-slot-viz">
@@ -439,7 +534,14 @@
                           <th>Coluna</th>
                           <th>Tipo</th>
                           <th>Classe</th>
-                          <th>Modo</th>
+                          <th>
+                            Modo
+                            <a v-if="growthDoc('storageMode', 'inrow')" class="growth-doc-link ms-1"
+                               :href="growthDoc('storageMode', 'inrow').url" target="_blank" rel="noopener noreferrer"
+                               title="MS Learn: armazenamento in-row, LOB e overflow">
+                              <i class="fal fa-external-link"></i>
+                            </a>
+                          </th>
                           <th class="text-end">Bytes na linha</th>
                         </tr>
                       </thead>
@@ -449,12 +551,24 @@
                           <td class="fw-semibold">
                             <span v-if="col.isPk" class="badge growth-pk-badge me-1">PK</span>{{ col.name }}
                           </td>
-                          <td class="small"><span :class="col.typeClass">{{ formatTypeLabel(col) }}</span></td>
+                          <td class="small">
+                            <span :class="col.typeClass">{{ formatTypeLabel(col) }}</span>
+                            <a class="growth-doc-link ms-1" :href="growthTypeDocUrl(col.type)"
+                               target="_blank" rel="noopener noreferrer"
+                               :title="'MS Learn: tipo ' + col.type">
+                              <i class="fal fa-external-link"></i>
+                            </a>
+                          </td>
                           <td class="small">{{ storageClassLabel(col) }}</td>
                           <td class="small">
                             <span class="badge growth-mode-badge" :class="'growth-mode-' + col.storageMode">
                               {{ storageModeLabel(col.storageMode) }}
                             </span>
+                            <a v-if="growthDoc('storageMode', col.storageMode)" class="growth-doc-link ms-1"
+                               :href="growthDoc('storageMode', col.storageMode).url" target="_blank" rel="noopener noreferrer"
+                               :title="'MS Learn: ' + growthDoc('storageMode', col.storageMode).label">
+                              <i class="fal fa-external-link"></i>
+                            </a>
                           </td>
                           <td class="text-end fw-semibold">{{ col.bytesInRow }}</td>
                         </tr>
@@ -475,11 +589,23 @@
                       </tbody>
                       <tfoot class="table-light">
                         <tr>
-                          <td colspan="4" class="text-muted">Record header</td>
+                          <td colspan="4" class="text-muted">
+                            Record header
+                            <a v-if="growthDoc('concept', 'recordHeader')" class="growth-doc-link ms-1"
+                               :href="growthDoc('concept', 'recordHeader').url" target="_blank" rel="noopener noreferrer">
+                              <i class="fal fa-external-link"></i>
+                            </a>
+                          </td>
                           <td class="text-end">{{ selectedRowLayout.header.total }}</td>
                         </tr>
                         <tr>
-                          <td colspan="4" class="text-muted">Null bitmap ({{ selectedRowLayout.nullBitmap.formula }})</td>
+                          <td colspan="4" class="text-muted">
+                            Null bitmap ({{ selectedRowLayout.nullBitmap.formula }})
+                            <a v-if="growthDoc('concept', 'nullBitmap')" class="growth-doc-link ms-1"
+                               :href="growthDoc('concept', 'nullBitmap').url" target="_blank" rel="noopener noreferrer">
+                              <i class="fal fa-external-link"></i>
+                            </a>
+                          </td>
                           <td class="text-end">{{ selectedRowLayout.nullBitmap.bytes }}</td>
                         </tr>
                         <tr>
@@ -487,7 +613,13 @@
                           <td class="text-end">{{ selectedRowLayout.fixedData.total }}</td>
                         </tr>
                         <tr>
-                          <td colspan="4" class="text-muted">Seção variável (contador + offsets + dados)</td>
+                          <td colspan="4" class="text-muted">
+                            Seção variável (contador + offsets + dados)
+                            <a v-if="growthDoc('concept', 'variableSection')" class="growth-doc-link ms-1"
+                               :href="growthDoc('concept', 'variableSection').url" target="_blank" rel="noopener noreferrer">
+                              <i class="fal fa-external-link"></i>
+                            </a>
+                          </td>
                           <td class="text-end">{{ selectedRowLayout.variableSection.total }}</td>
                         </tr>
                         <tr>
@@ -594,8 +726,20 @@
                       <td>
                         <span v-if="col.isPk" class="badge growth-pk-badge me-1">PK</span>{{ col.name }}
                       </td>
-                      <td><span :class="col.typeClass">{{ col.type }}</span></td>
-                      <td class="small text-muted">{{ storageModeLabel(col.storageMode) }}</td>
+                      <td>
+                        <span :class="col.typeClass">{{ col.type }}</span>
+                        <a class="growth-doc-link ms-1" :href="growthTypeDocUrl(col.type)"
+                           target="_blank" rel="noopener noreferrer">
+                          <i class="fal fa-external-link"></i>
+                        </a>
+                      </td>
+                      <td class="small text-muted">
+                        {{ storageModeLabel(col.storageMode) }}
+                        <a v-if="growthDoc('storageMode', col.storageMode)" class="growth-doc-link ms-1"
+                           :href="growthDoc('storageMode', col.storageMode).url" target="_blank" rel="noopener noreferrer">
+                          <i class="fal fa-external-link"></i>
+                        </a>
+                      </td>
                       <td class="text-end">{{ col.bytesInRow }}</td>
                     </tr>
                     <tr class="table-light">
@@ -628,10 +772,18 @@
               <div v-if="breakdownModal.dataLayout.lobColumns.length" class="alert alert-info py-2 small">
                 <strong>LOB root (16 B):</strong>
                 {{ breakdownModal.dataLayout.lobColumns.map(c => c.name).join(', ') }}
+                <a v-if="growthDoc('storageMode', 'lob_root')" class="growth-doc-link ms-2"
+                   :href="growthDoc('storageMode', 'lob_root').url" target="_blank" rel="noopener noreferrer">
+                  <i class="fal fa-external-link me-1"></i>Documentação
+                </a>
               </div>
               <div v-if="breakdownModal.dataLayout.overflowColumns.length" class="alert alert-warning py-2 small">
                 <strong>Overflow (24 B):</strong>
                 {{ breakdownModal.dataLayout.overflowColumns.map(c => c.name).join(', ') }}
+                <a v-if="growthDoc('storageMode', 'overflow')" class="growth-doc-link ms-2"
+                   :href="growthDoc('storageMode', 'overflow').url" target="_blank" rel="noopener noreferrer">
+                  <i class="fal fa-external-link me-1"></i>Documentação
+                </a>
               </div>
             </template>
 
