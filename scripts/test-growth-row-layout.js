@@ -72,5 +72,25 @@ var tiny = analysis.tables.find(function (t) { return t.name === 'EXEMPLO_TINYIN
 assert(tiny.rowLayout.totalBytes > 0, 'rowLayout on table');
 assert(tiny.scenarios.min.dataRowBytes < tiny.scenarios.max.dataRowBytes, 'min < max data row');
 
+// PAGE_HEADER_FIELDS sum to 96 bytes
+var phSum = SqlHelp.PAGE_HEADER_FIELDS.reduce(function (s, f) { return s + f.bytes; }, 0);
+assert(phSum === 96, 'PAGE_HEADER_FIELDS sum = 96 (got ' + phSum + ')');
+
+// buildSlotArrayDetail: single row => offset 96, 2 bytes per slot
+var slotOne = SqlHelp.buildSlotArrayDetail(1, tiny.rowLayout.totalBytes);
+assert(slotOne.slots.length === 1, 'single slot shown');
+assert(slotOne.slots[0].offsetValue === 96, 'first row offset = 96');
+assert(slotOne.bytesPerSlot === 2, 'slot size = 2 bytes');
+assert(slotOne.totalBytes === 2, 'one slot = 2 bytes total');
+
+var slotMany = SqlHelp.buildSlotArrayDetail(12, 100);
+assert(slotMany.slotsShown === 8 && slotMany.hasMore, 'max 8 slots displayed when count > 8');
+assert(slotMany.slots[0].offsetValue === 96, 'first slot offset still 96');
+assert(slotMany.slots[1].offsetValue === 196, 'second row contiguous at 96+100');
+
+var pageDiag = tiny.rowLayout.pageDiagram;
+assert(pageDiag.pageHeaderDetail && pageDiag.pageHeaderDetail.total === 96, 'pageDiagram has header detail');
+assert(pageDiag.slotArrayDetail && pageDiag.slotArrayDetail.slots.length >= 1, 'pageDiagram has slot detail');
+
 console.log(failed ? '\n' + failed + ' test(s) failed' : '\nAll tests passed');
 process.exit(failed ? 1 : 0);

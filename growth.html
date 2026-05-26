@@ -249,6 +249,180 @@
                       <span class="mono">{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }}</span>
                     </div>
                   </div>
+                  <div class="row g-4 mb-4">
+                    <div class="col-lg-5">
+                      <h6 class="small fw-semibold text-uppercase text-muted mb-2">
+                        <i class="fal fa-layer-group me-1"></i> Estrutura de uma linha
+                      </h6>
+                      <div class="growth-row-diagram">
+                        <div v-for="seg in selectedRowLayout.rowDiagram.segments" :key="seg.id"
+                             class="growth-row-seg" :class="'growth-row-seg--' + seg.cssClass"
+                             :style="{ width: rowSegWidth(seg.bytes, selectedRowLayout.rowDiagram.totalBytes) }"
+                             :title="seg.label + ': ' + seg.bytes + ' B'">
+                          <span class="growth-row-seg-label">{{ seg.label }}</span>
+                          <span class="growth-row-seg-bytes">{{ seg.bytes }} B</span>
+                        </div>
+                      </div>
+                      <div v-if="selectedRowLayout.rowDiagram.recordHeaderDetail" class="mt-2">
+                        <div class="growth-rh-bar" role="img" aria-label="Record header 12 bytes">
+                          <div v-for="f in selectedRowLayout.rowDiagram.recordHeaderDetail.fields" :key="f.id"
+                               class="growth-rh-seg"
+                               :style="{ flexGrow: f.bytes }"
+                               :title="f.label + ': ' + f.bytes + ' B'">
+                            <span class="growth-rh-seg-label">{{ f.bytes }}B</span>
+                          </div>
+                        </div>
+                        <ul class="list-unstyled small text-muted mb-0 mt-1 growth-rh-legend">
+                          <li v-for="f in selectedRowLayout.rowDiagram.recordHeaderDetail.fields" :key="'rh-' + f.id">
+                            <strong>{{ f.label }}</strong> ({{ f.bytes }} B) — {{ f.description }}
+                          </li>
+                        </ul>
+                      </div>
+                      <p class="small text-muted mt-2 mb-0">
+                        Uma linha = header + null bitmap + dados fixos (bits empacotados) + variáveis.
+                      </p>
+                    </div>
+                    <div class="col-lg-7">
+                      <h6 class="small fw-semibold text-uppercase text-muted mb-2">
+                        <i class="fal fa-file-alt me-1"></i> Página de dados (8 KB)
+                      </h6>
+                      <div class="growth-page-diagram-wrap">
+                        <div class="growth-page-diagram">
+                          <div v-for="seg in selectedRowLayout.pageDiagram.segments" :key="seg.id"
+                               class="growth-page-seg" :class="'growth-page-seg--' + seg.cssClass"
+                               :style="{ flexGrow: seg.bytes }"
+                               :title="seg.label + ': ' + seg.bytes + ' B'">
+                            <div class="growth-page-seg-inner">
+                              <span class="growth-page-seg-label">{{ seg.label }}</span>
+                              <span class="growth-page-seg-sublabel" v-if="seg.sublabel">{{ seg.sublabel }}</span>
+                              <span class="growth-page-seg-bytes">{{ formatBytes(seg.bytes) }}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="growth-page-side-note small text-muted">
+                          <div><strong>8192 B</strong> por página</div>
+                          <div>{{ selectedRowLayout.pageDiagram.formula }}</div>
+                          <div class="mt-1" v-if="selectedRowLayout.rowsPerPageEstimate > 0">
+                            ~{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }} linhas desta tabela cabem no corpo ({{ selectedRowLayout.pageDataBytes }} B úteis).
+                          </div>
+                        </div>
+                      </div>
+                      <p class="small text-muted mt-2 mb-0">
+                        O <strong>Row Offset Array</strong> fica na base da página (slots de 2 B apontando para cada linha).
+                        Linhas empilham-se após o page header de 96 B.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="row g-3 mb-4" v-if="selectedRowLayout.pageDiagram.pageHeaderDetail">
+                    <div class="col-lg-6">
+                      <div class="growth-detail-panel">
+                        <h6 class="growth-detail-panel-title">
+                          <i class="fal fa-info-circle me-1"></i> Page Header (96 B)
+                        </h6>
+                        <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.pageHeaderDetail.note }}</p>
+                        <div class="growth-ph-bar" role="img"
+                             :aria-label="'Mapa dos ' + selectedRowLayout.pageDiagram.pageHeaderDetail.total + ' bytes do page header'">
+                          <div v-for="f in selectedRowLayout.pageDiagram.pageHeaderDetail.fields" :key="f.id"
+                               class="growth-ph-seg" :class="'growth-ph-seg--' + f.cssClass"
+                               :style="{ flexGrow: f.bytes }"
+                               :title="f.label + ' (' + f.techName + '): ' + f.bytes + ' B'">
+                            <span class="growth-ph-seg-bytes">{{ f.bytes }}</span>
+                          </div>
+                        </div>
+                        <div class="table-responsive growth-ph-table-wrap mt-2">
+                          <table class="table table-sm table-bordered growth-ph-table mb-0">
+                            <thead>
+                              <tr>
+                                <th>Campo</th>
+                                <th class="text-end">Bytes</th>
+                                <th>Offset</th>
+                                <th>Descrição</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="f in selectedRowLayout.pageDiagram.pageHeaderDetail.fields" :key="'ph-' + f.id">
+                                <td>
+                                  <span class="growth-ph-dot" :class="'growth-ph-dot--' + f.cssClass"></span>
+                                  {{ f.label }}
+                                  <span class="text-muted font-monospace small">({{ f.techName }})</span>
+                                </td>
+                                <td class="text-end font-monospace">{{ f.bytes }}</td>
+                                <td class="font-monospace small">{{ f.offset }}–{{ f.offset + f.bytes - 1 }}</td>
+                                <td class="small text-muted">{{ f.description }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-lg-6" v-if="selectedRowLayout.pageDiagram.slotArrayDetail">
+                      <div class="growth-detail-panel" :class="{ 'growth-detail-panel--single-slot': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                        <h6 class="growth-detail-panel-title">
+                          <i class="fal fa-link me-1"></i> Row Offset Array
+                        </h6>
+                        <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.slotArrayDetail.explanation }}</p>
+                        <div class="growth-slot-viz">
+                          <div class="growth-slot-viz-body">
+                            <div class="growth-slot-viz-rows">
+                              <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'row-' + s.slotIndex"
+                                   class="growth-slot-viz-row-block"
+                                   :class="{ 'growth-slot-viz-row-block--highlight': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                                <span class="growth-slot-viz-row-name">{{ s.rowLabel }}</span>
+                                <span class="growth-slot-viz-row-range font-monospace small">
+                                  bytes {{ s.rowByteStart }}–{{ s.rowByteEnd }}
+                                </span>
+                              </div>
+                            </div>
+                            <div class="growth-slot-viz-connectors">
+                              <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'conn-' + s.slotIndex"
+                                   class="growth-slot-viz-connector"></div>
+                            </div>
+                            <div class="growth-slot-viz-slots">
+                              <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'slot-' + s.slotIndex"
+                                   class="growth-slot-viz-slot-chip"
+                                   :class="{ 'growth-slot-viz-slot-chip--highlight': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                                <span class="growth-slot-viz-slot-label">Slot {{ s.slotIndex }}</span>
+                                <span class="growth-slot-viz-slot-pos small text-muted">pág. {{ s.slotBytePosition }}–{{ s.slotByteEnd }}</span>
+                                <span class="growth-slot-viz-slot-val font-monospace">{{ s.offsetValue }} ({{ s.offsetHex }})</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="growth-slot-viz-foot small text-muted">
+                            Primeira linha em offset <strong>{{ selectedRowLayout.pageDiagram.slotArrayDetail.firstRowOffset }}</strong>
+                            (após o page header). Total: {{ selectedRowLayout.pageDiagram.slotArrayDetail.totalBytes }} B
+                            ({{ selectedRowLayout.pageDiagram.slotArrayDetail.bytesPerSlot }} B × {{ selectedRowLayout.pageDiagram.slotArrayDetail.slotCount }}).
+                          </div>
+                        </div>
+                        <p v-if="selectedRowLayout.pageDiagram.slotArrayDetail.hasMore" class="small text-warning mb-2">
+                          … mais {{ selectedRowLayout.pageDiagram.slotArrayDetail.moreCount.toLocaleString('pt-BR') }} slots (mostrando os primeiros {{ selectedRowLayout.pageDiagram.slotArrayDetail.slotsShown }}).
+                        </p>
+                        <div class="table-responsive">
+                          <table class="table table-sm table-bordered growth-slot-table mb-0">
+                            <thead>
+                              <tr>
+                                <th># Slot</th>
+                                <th>Pos. na página</th>
+                                <th class="text-end">Offset (dec)</th>
+                                <th>Offset (hex)</th>
+                                <th>Aponta para</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'tbl-' + s.slotIndex">
+                                <td>{{ s.slotIndex }}</td>
+                                <td class="font-monospace">{{ s.slotBytePosition }}–{{ s.slotByteEnd }}</td>
+                                <td class="text-end font-monospace">{{ s.offsetValue }}</td>
+                                <td class="font-monospace">{{ s.offsetHex }}</td>
+                                <td>{{ s.rowLabel }} @ byte {{ s.rowByteStart }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div class="growth-type-legend small mb-2">
                     <span class="growth-type-string">texto</span>
                     <span class="growth-type-numeric">numérico</span>
@@ -270,7 +444,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="col in selectedRowLayout.columns" :key="col.name"
+                        <tr v-for="col in selectedRowLayout.displayColumns" :key="col.name"
                             :class="{ 'growth-col-pk': col.isPk }">
                           <td class="fw-semibold">
                             <span v-if="col.isPk" class="badge growth-pk-badge me-1">PK</span>{{ col.name }}
@@ -283,6 +457,20 @@
                             </span>
                           </td>
                           <td class="text-end fw-semibold">{{ col.bytesInRow }}</td>
+                        </tr>
+                        <tr v-for="sum in selectedRowLayout.summaryRows" :key="sum.name"
+                            class="growth-summary-row">
+                          <td class="fw-semibold text-muted" :title="sum.bitNames ? 'Colunas: ' + sum.bitNames : ''">
+                            <i class="fal fa-layer-group me-1"></i>{{ sum.name }}
+                          </td>
+                          <td class="small"><span :class="sum.typeClass">{{ formatTypeLabel(sum) }}</span></td>
+                          <td class="small">{{ storageClassLabel(sum) }}</td>
+                          <td class="small">
+                            <span class="badge growth-mode-badge growth-mode-bit_packed">
+                              {{ storageModeLabel(sum.storageMode) }}
+                            </span>
+                          </td>
+                          <td class="text-end fw-semibold">{{ sum.bytesInRow }}</td>
                         </tr>
                       </tbody>
                       <tfoot class="table-light">

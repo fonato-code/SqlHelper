@@ -29,6 +29,58 @@
   var VAR_LEN_PREFIX = 2;
   var RECORD_HEADER_BYTES = 12;
   var INROW_VAR_MAX_PAYLOAD = 8000;
+  var SLOT_ARRAY_MAX_DISPLAY = 8;
+
+  var PAGE_HEADER_FIELDS = [
+    { id: 'pageId', label: 'ID da página', techName: 'm_pageId', bytes: 8, offset: 0,
+      description: 'Identifica arquivo (.mdf) e número da página no arquivo.', cssClass: 'ph-id' },
+    { id: 'headerVersion', label: 'Versão do header', techName: 'm_headerVersion', bytes: 1, offset: 8,
+      description: 'Versão da estrutura do cabeçalho.', cssClass: 'ph-meta' },
+    { id: 'type', label: 'Tipo da página', techName: 'm_type', bytes: 1, offset: 9,
+      description: 'Ex.: 1 = dados, 2 = índice, 3 = TEXT_MIX, 10 = IAM…', cssClass: 'ph-meta' },
+    { id: 'typeFlagBits', label: 'Flags de tipo', techName: 'm_typeFlagBits', bytes: 1, offset: 10,
+      description: 'Bits auxiliares do tipo de página.', cssClass: 'ph-meta' },
+    { id: 'level', label: 'Nível', techName: 'm_level', bytes: 1, offset: 11,
+      description: 'Nível na árvore de índice (B-tree).', cssClass: 'ph-meta' },
+    { id: 'flagBits', label: 'Flags', techName: 'm_flagBits', bytes: 1, offset: 12,
+      description: 'Estado da página (ex. ghost records).', cssClass: 'ph-meta' },
+    { id: 'indxId', label: 'ID do índice', techName: 'm_indxId', bytes: 2, offset: 13,
+      description: 'Índice ao qual a página pertence (0 = heap).', cssClass: 'ph-meta' },
+    { id: 'prevPage', label: 'Página anterior', techName: 'm_prevPage', bytes: 8, offset: 15,
+      description: 'Encadeamento duplo na estrutura do índice.', cssClass: 'ph-link' },
+    { id: 'nextPage', label: 'Próxima página', techName: 'm_nextPage', bytes: 8, offset: 23,
+      description: 'Próximo nó na mesma cadeia de páginas.', cssClass: 'ph-link' },
+    { id: 'pminRec', label: 'Offset pminRec', techName: 'm_pminRec', bytes: 2, offset: 31,
+      description: 'Menor offset de registro ghost na página.', cssClass: 'ph-space' },
+    { id: 'freeData', label: 'Início espaço livre', techName: 'm_freeData', bytes: 2, offset: 33,
+      description: 'Onde começa o bloco livre no corpo.', cssClass: 'ph-space' },
+    { id: 'freeCnt', label: 'Bytes livres', techName: 'm_freeCnt', bytes: 2, offset: 35,
+      description: 'Quantidade de bytes livres contíguos.', cssClass: 'ph-space' },
+    { id: 'reserved', label: 'Reservado', techName: 'm_reserved', bytes: 2, offset: 37,
+      description: 'Campo reservado / alinhamento.', cssClass: 'ph-space' },
+    { id: 'slotCnt', label: 'Qtd. slots', techName: 'm_slotCnt', bytes: 2, offset: 39,
+      description: 'Número de entradas no Row Offset Array.', cssClass: 'ph-slot' },
+    { id: 'lsn', label: 'LSN da página', techName: 'm_lsn', bytes: 10, offset: 41,
+      description: 'Log Sequence Number — recuperação e replicação.', cssClass: 'ph-log' },
+    { id: 'xactReserved', label: 'Reserva transação', techName: 'm_xactReserved', bytes: 8, offset: 51,
+      description: 'Espaço reservado para versões de linha.', cssClass: 'ph-log' },
+    { id: 'xdesId', label: 'XDES ID', techName: 'm_xdesId', bytes: 2, offset: 59,
+      description: 'Vínculo com estrutura de transação distribuída.', cssClass: 'ph-other' },
+    { id: 'ghostRecCnt', label: 'Ghost records', techName: 'm_ghostRecCnt', bytes: 2, offset: 61,
+      description: 'Contagem de registros marcados como ghost.', cssClass: 'ph-other' },
+    { id: 'tornBits', label: 'Torn bits', techName: 'm_tornBits', bytes: 4, offset: 63,
+      description: 'Detecção de gravação parcial (torn page).', cssClass: 'ph-other' },
+    { id: 'allocUnit', label: 'Unidade alocação', techName: 'm_allocUnitId / padding', bytes: 29, offset: 67,
+      description: 'Referência à unidade de alocação e bytes de alinhamento até 96.', cssClass: 'ph-other' }
+  ];
+
+  var RECORD_HEADER_FIELDS = [
+    { id: 'statusA', label: 'Status bits A', bytes: 4, description: 'Tipo de registro, flags de versão.' },
+    { id: 'statusB', label: 'Status bits B', bytes: 2, description: 'Colunas fixas/variáveis, ghost forwarded.' },
+    { id: 'fixedEnd', label: 'Fim dados fixos', bytes: 2, description: 'Offset onde terminam os dados de tamanho fixo.' },
+    { id: 'colCount', label: 'Nº colunas', bytes: 2, description: 'Quantidade de colunas na linha.' },
+    { id: 'nullOffset', label: 'Offset null bitmap', bytes: 2, description: 'Onde começa o bitmap de nulidade.' }
+  ];
 
   var TYPE_CATEGORIES = {
     string: ['varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext'],
@@ -197,20 +249,28 @@
     var nCols = columns.length;
 
     if (!nCols) {
-      return {
+      var emptyLayout = {
         scenario: scenario,
         columnCount: 0,
         header: { total: RECORD_HEADER_BYTES, statusBitsA: 4, statusBitsB: 2, fixedDataEnd: 2, columnCountField: 2, nullBitmapOffset: 2 },
-        nullBitmap: { bytes: 0 },
+        nullBitmap: { bytes: 0, formula: 'ceil(0/8)' },
         fixedData: { columns: [], bitColumns: [], bitPackedBytes: 0, total: 0 },
-        variableSection: { columnCountField: 0, offsetArrayBytes: 0, entries: [], total: 0 },
+        variableSection: { columnCountField: 0, offsetArrayBytes: 0, entries: [], dataBytes: 0, total: 0 },
+        displayColumns: [],
+        summaryRows: [],
         columns: [],
+        lobColumns: [],
+        overflowColumns: [],
         totalBytes: 0,
         exceedsRowLimit: false,
         rowsPerPageEstimate: 0,
         pageDataBytes: PAGE_DATA_BYTES,
-        rowLimitInRow: ROW_LIMIT_INROW
+        rowLimitInRow: ROW_LIMIT_INROW,
+        pkColumnsSum: 0
       };
+      emptyLayout.rowDiagram = buildRowDiagram(emptyLayout);
+      emptyLayout.pageDiagram = buildPageDiagram(emptyLayout);
+      return emptyLayout;
     }
 
     var fixedEntries = [];
@@ -299,31 +359,33 @@
     var offsetArrayBytes = 2 * varEntries.length;
     var varDataBytes = varEntries.reduce(function (s, e) { return s + e.bytesInRow; }, 0);
 
-    var allColumns = fixedEntries.slice();
+    varEntries.forEach(function (e) {
+      e.location = e.storageMode === 'inrow' ? 'Seção variável (in-row)' : e.location;
+    });
+
+    var displayColumns = fixedEntries.filter(function (e) { return !e.isBit; }).concat(varEntries);
+    var summaryRows = [];
     if (bitPackedBytes > 0) {
-      allColumns.push({
+      summaryRows.push({
         name: '(' + bitColumnNames.length + '× bit)',
         type: 'bit',
         typeClass: 'growth-type-numeric',
         lengthDisplay: String(bitColumnNames.length),
         storageClass: 'fixed',
         storageMode: 'bit_packed',
-        location: 'Dados fixos (8 bits = 1 B)',
+        location: 'Dados fixos (8 bits = 1 byte)',
         bytesInRow: bitPackedBytes,
         isPk: false,
         isBit: true,
+        isSummaryRow: true,
         bitNames: bitColumnNames.join(', ')
       });
     }
-    varEntries.forEach(function (e) {
-      e.location = e.storageMode === 'inrow' ? 'Seção variável (in-row)' : e.location;
-      allColumns.push(e);
-    });
 
     var lobColumns = varEntries.filter(function (e) { return e.storageMode === 'lob_root'; });
     var overflowColumns = varEntries.filter(function (e) { return e.storageMode === 'overflow'; });
 
-    return {
+    var layoutResult = {
       scenario: scenario,
       columnCount: nCols,
       header: {
@@ -350,15 +412,172 @@
       },
       lobColumns: lobColumns,
       overflowColumns: overflowColumns,
-      columns: allColumns,
+      displayColumns: displayColumns,
+      summaryRows: summaryRows,
+      columns: displayColumns.concat(summaryRows),
       totalBytes: total,
       exceedsRowLimit: total > ROW_LIMIT_INROW,
       rowsPerPageEstimate: total > 0 ? Math.floor(PAGE_DATA_BYTES / total) : 0,
       pageDataBytes: PAGE_DATA_BYTES,
       rowLimitInRow: ROW_LIMIT_INROW,
-      pkColumnsSum: allColumns.filter(function (c) { return c.isPk; }).reduce(function (s, c) {
+      pkColumnsSum: displayColumns.filter(function (c) { return c.isPk; }).reduce(function (s, c) {
         return s + (c.bytesInRow || 0);
       }, 0)
+    };
+
+    layoutResult.rowDiagram = buildRowDiagram(layoutResult);
+    layoutResult.pageDiagram = buildPageDiagram(layoutResult);
+    return layoutResult;
+  }
+
+  function offsetToHex(n) {
+    var h = Math.max(0, n).toString(16).toUpperCase();
+    while (h.length < 4) h = '0' + h;
+    return '0x' + h;
+  }
+
+  function buildSlotArrayDetail(slotCount, rowBytes) {
+    var count = Math.max(slotCount || 0, 1);
+    var showCount = Math.min(count, SLOT_ARRAY_MAX_DISPLAY);
+    var rowStart = PAGE_HEADER;
+    var slots = [];
+    var i;
+
+    for (i = 0; i < showCount; i++) {
+      var offsetValue = rowBytes > 0 ? rowStart + i * rowBytes : rowStart;
+      slots.push({
+        slotIndex: i + 1,
+        slotBytePosition: PAGE_SIZE - 2 * (i + 1),
+        slotByteEnd: PAGE_SIZE - 2 * i - 1,
+        offsetValue: offsetValue,
+        offsetHex: offsetToHex(offsetValue),
+        rowLabel: 'Row ' + (i + 1),
+        rowByteStart: offsetValue,
+        rowByteEnd: rowBytes > 0 ? offsetValue + rowBytes - 1 : offsetValue
+      });
+    }
+
+    return {
+      firstRowOffset: rowStart,
+      bytesPerSlot: 2,
+      totalBytes: 2 * count,
+      slotCount: count,
+      slotsShown: showCount,
+      hasMore: count > SLOT_ARRAY_MAX_DISPLAY,
+      moreCount: count - SLOT_ARRAY_MAX_DISPLAY,
+      slots: slots,
+      growsFromBottom: true,
+      explanation: 'Cada slot guarda um offset (ushort) do início da linha, medido a partir do byte 0 da página. ' +
+        'Os slots ficam no final da página e novos slots são inseridos subindo (de baixo para cima).'
+    };
+  }
+
+  function buildRowDiagram(layout) {
+    return {
+      totalBytes: layout.totalBytes,
+      recordHeaderDetail: {
+        fields: RECORD_HEADER_FIELDS,
+        total: RECORD_HEADER_BYTES
+      },
+      segments: [
+        { id: 'header', label: 'Record header', bytes: layout.header.total, cssClass: 'row-meta' },
+        { id: 'null', label: 'Null bitmap', bytes: layout.nullBitmap.bytes, cssClass: 'row-meta' },
+        { id: 'fixed', label: 'Dados fixos + bits', bytes: layout.fixedData.total, cssClass: 'row-fixed' },
+        { id: 'variable', label: 'Seção variável', bytes: layout.variableSection.total, cssClass: 'row-variable' }
+      ]
+    };
+  }
+
+  function buildPageDiagram(layout) {
+    var rowBytes = layout.totalBytes;
+    var rowsPerPage = layout.rowsPerPageEstimate;
+    var maxVisualRows = 6;
+    var segments = [];
+    var slotCount;
+    var rowsAreaBytes;
+
+    segments.push({
+      id: 'pageHeader',
+      label: 'Page Header',
+      sublabel: 'Clique abaixo para ver os 96 bytes',
+      bytes: PAGE_HEADER,
+      cssClass: 'page-header',
+      expandable: true
+    });
+
+    if (rowBytes <= 0) {
+      segments.push({
+        id: 'freeAll',
+        label: 'Espaço livre (corpo inteiro)',
+        sublabel: 'Nenhuma linha cabível',
+        bytes: PAGE_DATA_BYTES,
+        cssClass: 'page-free'
+      });
+    } else if (rowsPerPage > maxVisualRows) {
+      slotCount = rowsPerPage;
+      rowsAreaBytes = rowBytes * rowsPerPage;
+      segments.push({
+        id: 'rowsBlock',
+        label: 'Linhas de dados',
+        sublabel: rowsPerPage.toLocaleString('pt-BR') + ' × ' + rowBytes + ' B/linha',
+        bytes: rowsAreaBytes,
+        cssClass: 'page-row'
+      });
+    } else {
+      slotCount = Math.max(rowsPerPage, 1);
+      rowsAreaBytes = rowBytes * slotCount;
+      var r;
+      for (r = 0; r < slotCount; r++) {
+        segments.push({
+          id: 'row' + r,
+          label: 'Row ' + (r + 1),
+          sublabel: rowBytes + ' B',
+          bytes: rowBytes,
+          cssClass: 'page-row'
+        });
+      }
+    }
+
+    var slotBytes = 2 * slotCount;
+    var freeSpace = Math.max(0, PAGE_DATA_BYTES - rowsAreaBytes - slotBytes);
+    if (freeSpace > 0) {
+      segments.push({
+        id: 'free',
+        label: 'Espaço livre',
+        sublabel: 'Cresce do meio para baixo',
+        bytes: freeSpace,
+        cssClass: 'page-free'
+      });
+    }
+
+    segments.push({
+      id: 'slots',
+      label: 'Row Offset Array',
+      sublabel: '2 B × ' + slotCount + ' (da base para cima)',
+      bytes: slotBytes,
+      cssClass: 'page-slots',
+      expandable: true
+    });
+
+    var bodySum = segments.slice(1).reduce(function (s, seg) { return s + seg.bytes; }, 0);
+    var slotDetail = buildSlotArrayDetail(slotCount, rowBytes);
+
+    return {
+      pageSize: PAGE_SIZE,
+      pageHeaderBytes: PAGE_HEADER,
+      bodyBytes: PAGE_DATA_BYTES,
+      rowBytes: rowBytes,
+      rowsPerPage: rowsPerPage,
+      slotCount: slotCount,
+      segments: segments,
+      bodySum: bodySum,
+      formula: PAGE_HEADER + ' + ' + bodySum + ' = ' + (PAGE_HEADER + bodySum) + ' B (página 8 KB)',
+      pageHeaderDetail: {
+        fields: PAGE_HEADER_FIELDS,
+        total: PAGE_HEADER,
+        note: 'Sempre ocupa os bytes 0–95 de cada página de dados (tipo 1).'
+      },
+      slotArrayDetail: slotDetail
     };
   }
 
@@ -794,8 +1013,11 @@
     computeSqlServerRowLayout: computeSqlServerRowLayout,
     pkMaxRows: pkMaxRows,
     PAGE_SIZE: PAGE_SIZE,
+    PAGE_HEADER: PAGE_HEADER,
     PAGE_DATA_BYTES: PAGE_DATA_BYTES,
     ROW_LIMIT_INROW: ROW_LIMIT_INROW,
+    PAGE_HEADER_FIELDS: PAGE_HEADER_FIELDS,
+    buildSlotArrayDetail: buildSlotArrayDetail,
     analyzeTable: analyzeTable,
     analyzeDatabase: analyzeDatabase,
     formatBytes: formatBytes,

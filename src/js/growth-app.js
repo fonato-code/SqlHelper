@@ -121,6 +121,11 @@
         if (col.lengthDisplay) s += '(' + col.lengthDisplay + ')';
         return s;
       },
+      rowSegWidth(bytes, total) {
+        if (!total || total <= 0) return '10%';
+        var pct = Math.max(8, Math.round((bytes / total) * 100));
+        return pct + '%';
+      },
       readFile(file) {
         return new Promise(function (resolve, reject) {
           var reader = new FileReader();
