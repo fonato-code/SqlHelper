@@ -1084,6 +1084,35 @@
       };
     });
 
+    var ncPotencialBytes = 0;
+    table.indexList.forEach(function (idx) {
+      if (idx.indexType === 'CLUSTERED') return;
+      var ixColsP = indexColumnsForSize(idx);
+      ncPotencialBytes += computeRowSizePotencial(ixColsP);
+    });
+    var dataPotencialBytes = rowLayout.rowSizePotencial;
+    var bytesPerRowPotencial = dataPotencialBytes + ncPotencialBytes;
+    var potencialProjections = {};
+    ROW_COUNTS.forEach(function (target) {
+      var maxRowsP = pk.maxRows;
+      var effectiveP = maxRowsP != null ? Math.min(target, maxRowsP) : target;
+      var cappedP = maxRowsP != null && target > maxRowsP;
+      potencialProjections[target] = {
+        target: target,
+        effectiveRows: effectiveP,
+        cappedByPk: cappedP,
+        dataBytes: effectiveP * dataPotencialBytes,
+        indexBytes: effectiveP * ncPotencialBytes,
+        totalBytes: effectiveP * bytesPerRowPotencial
+      };
+    });
+    var potencial = {
+      dataRowBytes: dataPotencialBytes,
+      ncIndexBytesPerRow: ncPotencialBytes,
+      bytesPerRow: bytesPerRowPotencial,
+      projections: potencialProjections
+    };
+
     return {
       key: table.key,
       schema: table.schema,
@@ -1094,7 +1123,8 @@
       rowLayout: rowLayout,
       ncIndexesStructural: ncStructural,
       clusteredIndex: clusteredIndex,
-      scenarios: scenarios
+      scenarios: scenarios,
+      potencial: potencial
     };
   }
 
@@ -1117,6 +1147,16 @@
         };
       });
     });
+    dbTotals.potencial = { projections: {} };
+    ROW_COUNTS.forEach(function (target) {
+      dbTotals.potencial.projections[target] = {
+        target: target,
+        totalBytes: 0,
+        dataBytes: 0,
+        indexBytes: 0,
+        anyCapped: false
+      };
+    });
 
     tableAnalyses.forEach(function (ta) {
       SCENARIOS.forEach(function (sc) {
@@ -1129,6 +1169,14 @@
           d.indexBytes += p.indexBytes;
           if (p.cappedByPk) d.anyCapped = true;
         });
+      });
+      ROW_COUNTS.forEach(function (target) {
+        var pp = ta.potencial.projections[target];
+        var dp = dbTotals.potencial.projections[target];
+        dp.totalBytes += pp.totalBytes;
+        dp.dataBytes += pp.dataBytes;
+        dp.indexBytes += pp.indexBytes;
+        if (pp.cappedByPk) dp.anyCapped = true;
       });
     });
 

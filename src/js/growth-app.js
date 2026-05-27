@@ -1,7 +1,7 @@
 /* global Vue, SqlHelp, bootstrap */
 (function () {
   'use strict';
-  var SCENARIO_LABELS = { min: 'Mínimo', media: 'Médio', max: 'Máximo' };
+  var SCENARIO_LABELS = { min: 'Mínimo', media: 'Médio', max: 'Máximo', potencial: 'Potencial' };
   var ROW_COUNT_LABELS = { 1000: '1.000', 10000: '10.000', 1000000: '1.000.000' };
 
   const { createApp } = Vue;
@@ -101,10 +101,20 @@
         var ta = this.selectedTable;
         return ta ? (ta.ncIndexesStructural || []) : [];
       },
+      projectionRows() {
+        if (!this.selectedTable) return [];
+        var rows = SqlHelp.SCENARIOS.map(function (sc) {
+          return { id: sc, label: SCENARIO_LABELS[sc], isPotencial: false };
+        });
+        if (this.selectedTable.potencial) {
+          rows.push({ id: 'potencial', label: SCENARIO_LABELS.potencial, isPotencial: true });
+        }
+        return rows;
+      },
       dbTotalsRows() {
         if (!this.analysis) return [];
         var self = this;
-        return SqlHelp.SCENARIOS.map(function (sc) {
+        var rows = SqlHelp.SCENARIOS.map(function (sc) {
           return {
             scenario: sc,
             label: SCENARIO_LABELS[sc],
@@ -119,6 +129,22 @@
             })
           };
         });
+        if (self.analysis.dbTotals.potencial) {
+          rows.push({
+            scenario: 'potencial',
+            label: SCENARIO_LABELS.potencial,
+            projections: SqlHelp.ROW_COUNTS.map(function (target) {
+              var p = self.analysis.dbTotals.potencial.projections[target];
+              return {
+                target: target,
+                label: ROW_COUNT_LABELS[target] || String(target),
+                totalBytes: p.totalBytes,
+                capped: p.anyCapped
+              };
+            })
+          });
+        }
+        return rows;
       }
     },
     methods: {
@@ -146,8 +172,9 @@
         if (pk.maxRows == null) return 'Sem limite prático por tipo';
         return 'Máx. ' + pk.maxRows.toLocaleString('pt-BR') + ' linhas (tipo ' + pk.type + ')';
       },
-      projectionCell(tableAnalysis, scenario, target) {
-        var p = tableAnalysis.scenarios[scenario].projections[target];
+      projectionCell(tableAnalysis, source, target) {
+        var src = source === 'potencial' ? tableAnalysis.potencial : tableAnalysis.scenarios[source];
+        var p = src.projections[target];
         return {
           bytes: p.totalBytes,
           effective: p.effectiveRows,

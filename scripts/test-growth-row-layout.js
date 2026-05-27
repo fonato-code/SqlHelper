@@ -77,6 +77,20 @@ assert(typeof tiny.rowLayout.rowSizePotencial === 'number' && tiny.rowLayout.row
 var potOne = SqlHelp.computeRowSizePotencial([col('X', 'varchar', 10)]);
 assert(potOne === 12 + 10 + 1, 'varchar(10) potencial: 12 + overhead 10 + null 1 = 23');
 assert(tiny.scenarios.min.dataRowBytes < tiny.scenarios.max.dataRowBytes, 'min < max data row');
+assert(tiny.potencial && tiny.potencial.bytesPerRow >= tiny.rowLayout.rowSizePotencial, 'table has potencial projection');
+assert(tiny.potencial.dataRowBytes === tiny.rowLayout.rowSizePotencial, 'potencial bytesPerRow uses rowSizePotencial');
+
+var potProj = tiny.potencial.projections[1000000];
+if (tiny.pk.maxRows != null) {
+  assert(potProj.cappedByPk, 'potencial projection capped by PK when applicable');
+  assert(potProj.effectiveRows === tiny.pk.maxRows, 'potencial effective rows respects PK max');
+}
+assert(
+  analysis.dbTotals.potencial &&
+  analysis.dbTotals.potencial.projections[1000] &&
+  analysis.dbTotals.potencial.projections[1000].totalBytes > 0,
+  'dbTotals has potencial row'
+);
 
 // PAGE_HEADER_FIELDS sum to 96 bytes
 var phSum = SqlHelp.PAGE_HEADER_FIELDS.reduce(function (s, f) { return s + f.bytes; }, 0);

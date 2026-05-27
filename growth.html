@@ -216,25 +216,29 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="sc in ['min','media','max']" :key="sc"
-                            :class="'growth-scenario-' + sc">
-                          <td class="fw-semibold">{{ scenarioLabel(sc) }}</td>
+                        <tr v-for="row in projectionRows" :key="row.id"
+                            :class="'growth-scenario-' + row.id">
+                          <td class="fw-semibold">{{ row.label }}</td>
                           <td class="text-end">
-                            <button type="button" class="btn btn-link btn-sm p-0 mono growth-bytes-link"
-                                    :class="'growth-scenario-' + sc"
+                            <button v-if="!row.isPotencial"
+                                    type="button" class="btn btn-link btn-sm p-0 mono growth-bytes-link"
+                                    :class="'growth-scenario-' + row.id"
                                     title="Ver detalhamento da soma"
-                                    @click="openRowBreakdown(sc)">
-                              {{ formatBytes(selectedTable.scenarios[sc].bytesPerRow) }}
+                                    @click="openRowBreakdown(row.id)">
+                              {{ formatBytes(selectedTable.scenarios[row.id].bytesPerRow) }}
                               <i class="fal fa-search-plus ms-1 small opacity-75"></i>
                             </button>
+                            <span v-else class="mono" :class="'growth-scenario-' + row.id">
+                              {{ formatBytes(selectedTable.potencial.bytesPerRow) }}
+                            </span>
                           </td>
                           <td v-for="target in [1000, 10000, 1000000]" :key="target" class="text-end">
-                            <span :class="{ 'growth-capped': projectionCell(selectedTable, sc, target).capped }"
-                                  :title="projectionCell(selectedTable, sc, target).capped
-                                    ? 'Efetivo: ' + projectionCell(selectedTable, sc, target).effective.toLocaleString('pt-BR') + ' linhas'
+                            <span :class="{ 'growth-capped': projectionCell(selectedTable, row.id, target).capped }"
+                                  :title="projectionCell(selectedTable, row.id, target).capped
+                                    ? 'Efetivo: ' + projectionCell(selectedTable, row.id, target).effective.toLocaleString('pt-BR') + ' linhas'
                                     : ''">
-                              {{ formatBytes(projectionCell(selectedTable, sc, target).bytes) }}
-                              <span v-if="projectionCell(selectedTable, sc, target).capped">*</span>
+                              {{ formatBytes(projectionCell(selectedTable, row.id, target).bytes) }}
+                              <span v-if="projectionCell(selectedTable, row.id, target).capped">*</span>
                             </span>
                           </td>
                         </tr>
