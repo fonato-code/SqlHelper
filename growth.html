@@ -337,21 +337,13 @@
                         </a>
                       </h6>
                       <p class="small text-muted mb-2">{{ selectedRowLayout.rowDiagram.rowStructureDetail.note }}</p>
-                      <div class="growth-row-diagram mb-2">
-                        <div v-for="seg in selectedRowLayout.rowDiagram.segments" :key="seg.id"
-                             class="growth-row-seg" :class="'growth-row-seg--' + seg.cssClass"
-                             :style="{ width: rowSegWidth(seg.bytes, selectedRowLayout.rowDiagram.totalBytes) }"
-                             :title="seg.label + ': ' + seg.bytes + ' B'">
-                          <span class="growth-row-seg-label">{{ seg.label }}</span>
-                          <span class="growth-row-seg-bytes">{{ seg.bytes }} B</span>
-                        </div>
-                      </div>
                       <div class="growth-rs-bar" role="img"
                            :aria-label="'Mapa dos ' + selectedRowLayout.rowDiagram.rowStructureDetail.total + ' bytes da linha'">
-                        <div v-for="f in selectedRowLayout.rowDiagram.rowStructureDetail.fields" :key="f.id"
-                             class="growth-rs-seg" :class="'growth-rs-seg--' + f.cssClass"
+                        <div v-for="f in rowStructureBarFields" :key="f.id"
+                             class="growth-rs-seg" :class="['growth-rs-seg--' + f.cssClass, { 'growth-rs-seg--clickable': f.detailMode }]"
                              :style="{ flexGrow: f.bytes }"
-                             :title="f.label + ': ' + f.bytes + ' B'">
+                             :title="f.label + ': ' + f.bytes + ' B'"
+                             @click="f.detailMode && openGrowthFieldDetail(f)">
                           <span class="growth-rs-seg-bytes">{{ f.bytes }}</span>
                         </div>
                       </div>
@@ -371,14 +363,47 @@
                                 <span class="growth-rs-dot" :class="'growth-rs-dot--' + f.cssClass"></span>
                                 {{ f.label }}
                                 <span class="text-muted font-monospace small" v-if="f.techName">({{ f.techName }})</span>
+                                <button v-if="f.detailMode === 'popover'" type="button"
+                                        class="growth-detail-info-btn ms-1"
+                                        :id="'rs-popover-' + f.id"
+                                        tabindex="0"
+                                        :title="'Detalhes: ' + f.detailTitle"
+                                        @click.stop>
+                                  <i class="fal fa-info-circle"></i>
+                                </button>
+                                <button v-else-if="f.detailMode === 'modal'" type="button"
+                                        class="growth-detail-info-btn ms-1"
+                                        :title="'Ver detalhes: ' + f.detailTitle"
+                                        @click.stop="openGrowthFieldDetail(f)">
+                                  <i class="fal fa-expand-alt"></i>
+                                </button>
                               </td>
-                              <td class="text-end font-monospace">{{ f.bytes }}</td>
-                              <td class="font-monospace small">{{ f.offset }}–{{ f.offset + f.bytes - 1 }}</td>
-                              <td class="small text-muted">{{ f.description }}</td>
+                              <td class="text-end font-monospace">{{ f.bytes || '—' }}</td>
+                              <td class="font-monospace small">
+                                <template v-if="f.offset >= 0">{{ f.offset }}–{{ f.offset + f.bytes - 1 }}</template>
+                                <template v-else>—</template>
+                              </td>
+                              <td class="small text-muted">
+                                {{ f.description }}
+                                <button v-if="f.detailMode === 'modal'" type="button"
+                                        class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                        @click="openGrowthFieldDetail(f)">Ver tabela</button>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
                       </div>
+                      <p v-if="selectedRowLayout.rowDiagram.rowStructureDetail.attributionUrl"
+                         class="growth-detail-attribution small text-muted mb-0 mt-2">
+                        Detalhes baseados em
+                        <a :href="selectedRowLayout.rowDiagram.rowStructureDetail.attributionUrl"
+                           target="_blank" rel="noopener noreferrer">Paul S. Randal (SQLskills)</a>
+                        <template v-if="selectedRowLayout.rowDiagram.rowStructureDetail.learnUrl">
+                          · <a :href="selectedRowLayout.rowDiagram.rowStructureDetail.learnUrl"
+                               target="_blank" rel="noopener noreferrer">MS Learn</a>
+                        </template>
+                        — registro PRIMARY não comprimido; projeção por esquema.
+                      </p>
                     </div>
 
                     <!-- 2. Página de dados (8 KB) -->
@@ -438,7 +463,7 @@
                                class="growth-ph-seg" :class="['growth-ph-seg--' + f.cssClass, { 'growth-ph-seg--clickable': f.detailMode }]"
                                :style="{ flexGrow: f.bytes }"
                                :title="f.label + ' (' + f.techName + '): ' + f.bytes + ' B'"
-                               @click="f.detailMode && openPageHeaderFieldDetail(f)">
+                               @click="f.detailMode && openGrowthFieldDetail(f)">
                             <span class="growth-ph-seg-bytes">{{ f.bytes }}</span>
                           </div>
                         </div>
@@ -459,7 +484,7 @@
                                   {{ f.label }}
                                   <span class="text-muted font-monospace small">({{ f.techName }})</span>
                                   <button v-if="f.detailMode === 'popover'" type="button"
-                                          class="growth-ph-info-btn ms-1"
+                                          class="growth-detail-info-btn ms-1"
                                           :id="'ph-popover-' + f.id"
                                           tabindex="0"
                                           :title="'Detalhes: ' + f.detailTitle"
@@ -467,9 +492,9 @@
                                     <i class="fal fa-info-circle"></i>
                                   </button>
                                   <button v-else-if="f.detailMode === 'modal'" type="button"
-                                          class="growth-ph-info-btn ms-1"
+                                          class="growth-detail-info-btn ms-1"
                                           :title="'Ver detalhes: ' + f.detailTitle"
-                                          @click.stop="openPageHeaderFieldDetail(f)">
+                                          @click.stop="openGrowthFieldDetail(f)">
                                     <i class="fal fa-expand-alt"></i>
                                   </button>
                                 </td>
@@ -479,14 +504,14 @@
                                   {{ f.description }}
                                   <button v-if="f.detailMode === 'modal'" type="button"
                                           class="btn btn-link btn-sm p-0 ms-1 align-baseline"
-                                          @click="openPageHeaderFieldDetail(f)">Ver tabela</button>
+                                          @click="openGrowthFieldDetail(f)">Ver tabela</button>
                                 </td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
                         <p v-if="selectedRowLayout.pageDiagram.pageHeaderDetail.attributionUrl"
-                           class="growth-ph-attribution small text-muted mb-0">
+                           class="growth-detail-attribution small text-muted mb-0">
                           Detalhes baseados em
                           <a :href="selectedRowLayout.pageDiagram.pageHeaderDetail.attributionUrl"
                              target="_blank" rel="noopener noreferrer">Paul S. Randal (SQLskills)</a>.
@@ -727,17 +752,17 @@
       </template>
     </main>
 
-    <div class="modal fade" id="pageHeaderDetailModal" tabindex="-1" aria-labelledby="pageHeaderDetailModalLabel" aria-hidden="true">
+    <div class="modal fade" id="growthDetailModal" tabindex="-1" aria-labelledby="growthDetailModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content" v-if="pageHeaderDetailModal">
+        <div class="modal-content" v-if="growthDetailModal">
           <div class="modal-header">
-            <h5 class="modal-title" id="pageHeaderDetailModalLabel">{{ pageHeaderDetailModal.title }}</h5>
+            <h5 class="modal-title" id="growthDetailModalLabel">{{ growthDetailModal.title }}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"
-                    @click="closePageHeaderDetail"></button>
+                    @click="closeGrowthDetail"></button>
           </div>
-          <div class="modal-body growth-ph-modal-body" v-html="pageHeaderDetailModal.html"></div>
+          <div class="modal-body growth-detail-modal-body" v-html="growthDetailModal.html"></div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" @click="closePageHeaderDetail">Fechar</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" @click="closeGrowthDetail">Fechar</button>
           </div>
         </div>
       </div>
@@ -888,6 +913,7 @@
   <script src="src/js/sqlhelp-sql.js"></script>
   <script src="src/js/sqlhelp-ui.js"></script>
   <script src="src/js/growth-page-header-details.js"></script>
+  <script src="src/js/growth-record-details.js"></script>
   <script src="src/js/sqlhelp-growth-lib.js"></script>
   <script src="src/js/growth-app.js"></script>
 </body>

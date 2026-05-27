@@ -28,6 +28,9 @@
   var OVERFLOW_PTR_BYTES = 24;
   var VAR_LEN_PREFIX = 2;
   var RECORD_HEADER_BYTES = 12;
+  var RECORD_HEADER_PHYSICAL = 4;
+  var NULL_COL_COUNT_BYTES = 2;
+  var RECORD_HEADER_META_BYTES = RECORD_HEADER_BYTES - RECORD_HEADER_PHYSICAL - NULL_COL_COUNT_BYTES;
   var INROW_VAR_MAX_PAYLOAD = 8000;
   var SLOT_ARRAY_MAX_DISPLAY = 8;
 
@@ -552,95 +555,142 @@
     var offset = 0;
     var vs = layout.variableSection;
     var nVar = vs.entries ? vs.entries.length : 0;
+    var nullBitmapOnly = layout.nullBitmap.bytes;
 
-    RECORD_HEADER_FIELDS.forEach(function (f) {
-      fields.push({
-        id: 'rh-' + f.id,
-        label: f.label,
-        techName: f.label,
-        bytes: f.bytes,
-        offset: offset,
-        description: f.description,
-        cssClass: 'row-hdr'
-      });
-      offset += f.bytes;
-    });
-
-    if (layout.nullBitmap.bytes > 0) {
-      fields.push({
-        id: 'nullBitmap',
-        label: 'Null bitmap',
-        techName: 'null bitmap',
-        bytes: layout.nullBitmap.bytes,
-        offset: offset,
-        description: 'Um bit por coluna na linha (' + layout.nullBitmap.formula + ').',
-        cssClass: 'row-null'
-      });
-      offset += layout.nullBitmap.bytes;
+    function pushField(obj) {
+      fields.push(obj);
+      offset += obj.bytes;
     }
+
+    pushField({
+      id: 'recordHeader',
+      label: 'Record header',
+      techName: 'TagA / TagB / offset',
+      bytes: RECORD_HEADER_PHYSICAL,
+      offset: offset,
+      description: 'Primeiros 4 bytes físicos do registro.',
+      cssClass: 'row-hdr'
+    });
 
     if (layout.fixedData.total > 0) {
       var fixedDesc = 'Colunas de tamanho fixo';
       if (layout.fixedData.bitPackedBytes > 0) {
-        fixedDesc += ' e ' + layout.fixedData.bitColumns.length + ' coluna(s) bit empacotada(s) (' +
-          layout.fixedData.bitPackedBytes + ' B)';
+        fixedDesc += ' + ' + layout.fixedData.bitColumns.length + ' bit(s) empacotado(s)';
       }
-      fixedDesc += '.';
-      fields.push({
+      pushField({
         id: 'fixedData',
         label: 'Dados fixos + bits',
         techName: 'fixed-length data',
         bytes: layout.fixedData.total,
         offset: offset,
-        description: fixedDesc,
+        description: fixedDesc + '.',
         cssClass: 'row-fixed'
       });
-      offset += layout.fixedData.total;
+    }
+
+    if (nullBitmapOnly > 0 || layout.columnCount > 0) {
+      pushField({
+        id: 'nullColCount',
+        label: 'Contagem colunas',
+        techName: 'column count',
+        bytes: NULL_COL_COUNT_BYTES,
+        offset: offset,
+        description: '2 B antes do null bitmap.',
+        cssClass: 'row-null'
+      });
+      pushField({
+        id: 'nullBitmap',
+        label: 'Null bitmap',
+        techName: 'null bitmap',
+        bytes: nullBitmapOnly,
+        offset: offset,
+        description: layout.nullBitmap.formula + ' — 1 bit por coluna.',
+        cssClass: 'row-null'
+      });
+    }
+
+    if (RECORD_HEADER_META_BYTES > 0) {
+      pushField({
+        id: 'recordHeaderMeta',
+        label: 'Header lógico (ext.)',
+        techName: 'SqlHelp model',
+        bytes: RECORD_HEADER_META_BYTES,
+        offset: offset,
+        description: 'Completa os 12 B do modelo de cálculo SqlHelp.',
+        cssClass: 'row-hdr-meta'
+      });
     }
 
     if (vs.total > 0) {
-      fields.push({
-        id: 'varCount',
+      pushField({
+        id: 'varColCount',
         label: 'Contador variáveis',
         techName: 'variable column count',
         bytes: vs.columnCountField || 2,
         offset: offset,
-        description: 'Número de colunas de tamanho variável na linha.',
+        description: 'Número de colunas variáveis.',
         cssClass: 'row-var'
       });
-      offset += vs.columnCountField || 2;
 
       if (vs.offsetArrayBytes > 0) {
-        fields.push({
+        pushField({
           id: 'varOffsets',
           label: 'Array de offsets',
           techName: 'column offset array',
           bytes: vs.offsetArrayBytes,
           offset: offset,
-          description: '2 bytes × ' + nVar + ' coluna(s) variável(is).',
+          description: '2 B × ' + nVar + ' coluna(s) variável(is).',
           cssClass: 'row-var'
         });
-        offset += vs.offsetArrayBytes;
       }
 
       if (vs.dataBytes > 0) {
-        fields.push({
+        pushField({
           id: 'varData',
           label: 'Dados variáveis',
           techName: 'variable-length data',
           bytes: vs.dataBytes,
           offset: offset,
-          description: 'Valores in-row, ponteiros LOB (16 B) ou overflow (24 B) conforme o modo.',
+          description: 'In-row, LOB (16 B) ou overflow (24 B).',
           cssClass: 'row-var-data'
         });
-        offset += vs.dataBytes;
       }
     }
 
+    fields.push({
+      id: 'recordType',
+      label: 'Tipos de registro (TagA)',
+      techName: 'reference',
+      bytes: 0,
+      offset: -1,
+      description: 'Referência — ver tabela de tipos PRIMARY, forwarded, ghost…',
+      cssClass: 'row-ref',
+      isReference: true
+    });
+
+    fields.push({
+      id: 'versionTag',
+      label: 'Tag versionamento (opc.)',
+      techName: 'versioning tag',
+      bytes: 0,
+      offset: -1,
+      description: '14 B opcionais — RCSI/snapshot; não contado na projeção.',
+      cssClass: 'row-ref',
+      isReference: true
+    });
+
+    var enriched = typeof GrowthRecordDetails !== 'undefined'
+      ? GrowthRecordDetails.enrichRowStructureFields(fields)
+      : fields;
+
     return {
-      fields: fields,
+      fields: enriched,
       total: layout.totalBytes,
-      note: 'Mapa byte a byte da linha de dados (ordem física simplificada).'
+      note: 'Ordem física de registro PRIMARY não comprimido (SQL Server 2025). Header lógico SqlHelp = 12 B.',
+      attributionUrl: typeof GrowthRecordDetails !== 'undefined'
+        ? GrowthRecordDetails.SQLSKILLS_RECORD_URL : null,
+      learnUrl: typeof GrowthRecordDetails !== 'undefined'
+        ? GrowthRecordDetails.MS_RECORD_URL : null
     };
   }
 

@@ -6,6 +6,7 @@ var fs = require('fs');
 global.SqlHelp = {};
 require(path.join(__dirname, '../src/js/sqlhelp-sql.js'));
 require(path.join(__dirname, '../src/js/growth-page-header-details.js'));
+require(path.join(__dirname, '../src/js/growth-record-details.js'));
 require(path.join(__dirname, '../src/js/sqlhelp-growth-lib.js'));
 
 var failed = 0;
@@ -108,6 +109,15 @@ var rsDetail = tiny.rowLayout.rowDiagram.rowStructureDetail;
 var rsSum = rsDetail.fields.reduce(function (s, f) { return s + f.bytes; }, 0);
 assert(rsSum === tiny.rowLayout.totalBytes, 'rowStructureDetail sums to totalBytes');
 assert(rsDetail.fields[0].offset === 0, 'row structure starts at offset 0');
+assert(rsDetail.fields[0].id === 'recordHeader', 'first field is physical record header');
+var fixedIdx = rsDetail.fields.findIndex(function (f) { return f.id === 'fixedData'; });
+var headerIdx = rsDetail.fields.findIndex(function (f) { return f.id === 'recordHeader'; });
+assert(fixedIdx > headerIdx, 'fixed data after record header (physical order)');
+var rsHeader = rsDetail.fields.find(function (f) { return f.id === 'recordHeader'; });
+var rsType = rsDetail.fields.find(function (f) { return f.id === 'recordType'; });
+assert(rsHeader && rsHeader.detailMode === 'popover', 'recordHeader has popover detail');
+assert(rsType && rsType.detailMode === 'modal', 'recordType has modal detail');
+assert(rsDetail.attributionUrl && rsDetail.learnUrl, 'row structure SQLskills + MS Learn URLs');
 
 assert(SqlHelp.GROWTH_DOCS && SqlHelp.GROWTH_DOCS.sections.length >= 3, 'GROWTH_DOCS sections');
 assert(SqlHelp.getGrowthDoc('storageMode', 'lob_root').url.indexOf('learn.microsoft.com') !== -1, 'LOB doc URL');
