@@ -133,6 +133,48 @@ assert(rsHeader && rsHeader.detailMode === 'popover', 'recordHeader has popover 
 assert(rsType && rsType.detailMode === 'modal', 'recordType has modal detail');
 assert(rsDetail.attributionUrl && rsDetail.learnUrl, 'row structure SQLskills + MS Learn URLs');
 
+assert(tiny.alerts && typeof tiny.alerts.score === 'number', 'analyzeTable attaches alerts');
+assert(tiny.alerts.score >= 0 && tiny.alerts.score <= 100, 'alert score in 0..100');
+assert(typeof SqlHelp.evaluateTableAlerts === 'function', 'evaluateTableAlerts exported');
+var legacyHas = !!(tiny.rowLayout.exceedsRowLimitPotencial || tiny.rowLayout.exceedsPageBody ||
+  tiny.rowLayout.exceedsRowLimit);
+if (legacyHas) assert(tiny.alerts.hasAny, 'legacy size flags imply hasAny alert');
+
+var pkTinyCols = [col('Id', 'tinyint', 4, 3, 0)];
+var layoutPkTiny = SqlHelp.computeSqlServerRowLayout(pkTinyCols, {});
+var parsedPk = {
+  tables: {
+    'dbo.T_PK': {
+      key: 'dbo.T_PK',
+      schema: 'dbo',
+      name: 'T_PK',
+      columnOrder: ['Id'],
+      columns: { Id: pkTinyCols[0] },
+      columnsByName: { Id: pkTinyCols[0] },
+      indexOrder: ['PK'],
+      indexes: {
+        PK: {
+          name: 'PK',
+          indexType: 'CLUSTERED',
+          isPrimaryKey: true,
+          isUnique: true,
+          keyColumns: [{ name: 'Id', type: 'tinyint', keyOrdinal: 1 }],
+          includeColumns: []
+        }
+      },
+      indexList: [],
+      hasClustered: true
+    }
+  },
+  tableCount: 1,
+  colCount: 1,
+  indexCount: 1
+};
+parsedPk.tables['dbo.T_PK'].indexList = [parsedPk.tables['dbo.T_PK'].indexes.PK];
+var taPk = SqlHelp.analyzeTable(parsedPk.tables['dbo.T_PK']);
+var pkAlert = taPk.alerts.items.some(function (a) { return a.id === SqlHelp.GROWTH_ALERT_IDS.PK_CAPACIDADE; });
+assert(pkAlert, 'tinyint PK triggers PK_CAPACIDADE');
+
 assert(SqlHelp.GROWTH_DOCS && SqlHelp.GROWTH_DOCS.sections.length >= 3, 'GROWTH_DOCS sections');
 assert(SqlHelp.getGrowthDoc('storageMode', 'lob_root').url.indexOf('learn.microsoft.com') !== -1, 'LOB doc URL');
 assert(SqlHelp.getGrowthTypeDocUrl('varchar').indexOf('char-and-varchar') !== -1, 'varchar type doc');

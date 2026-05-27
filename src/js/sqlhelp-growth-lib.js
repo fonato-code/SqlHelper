@@ -24,6 +24,22 @@
   var PAGE_HEADER = 96;
   var PAGE_DATA_BYTES = PAGE_SIZE - PAGE_HEADER;
   var ROW_LIMIT_INROW = 8060;
+  var GROWTH_ALERT_THRESHOLDS = {
+    rowsPerPageWarning: 5,
+    rowsPerPageCritical: 2,
+    maxNcIndexes: 10,
+    pkCapTarget: 1000000
+  };
+  var GROWTH_ALERT_IDS = {
+    ROW_POTENCIAL_8060: 'ROW_POTENCIAL_8060',
+    ROW_POTENCIAL_PAGINA: 'ROW_POTENCIAL_PAGINA',
+    ROW_ESTRUTURAL_8060: 'ROW_ESTRUTURAL_8060',
+    POCAS_LINHAS_PAGINA: 'POUCAS_LINHAS_PAGINA',
+    PK_CAPACIDADE: 'PK_CAPACIDADE',
+    LOB_NA_LINHA: 'LOB_NA_LINHA',
+    OVERFLOW_PROJETADO: 'OVERFLOW_PROJETADO',
+    CUSTO_INDICES_NC: 'CUSTO_INDICES_NC'
+  };
   var LOB_ROOT_BYTES = 16;
   var OVERFLOW_PTR_BYTES = 24;
   var VAR_LEN_PREFIX = 2;
@@ -1008,6 +1024,149 @@
     return clusteredIndex;
   }
 
+  function countNcIndexes(table) {
+    var n = 0;
+    table.indexList.forEach(function (idx) {
+      if (idx.indexType !== 'CLUSTERED') n++;
+    });
+    return n;
+  }
+
+  function evaluateTableAlerts(ta) {
+    var rl = ta.rowLayout;
+    var maxSc = ta.scenarios && ta.scenarios.max;
+    var maxData = maxSc && maxSc.breakdown ? maxSc.breakdown.dataRow : null;
+    var items = [];
+    var score = 0;
+    var th = GROWTH_ALERT_THRESHOLDS;
+
+    function push(item) {
+      items.push(item);
+    }
+
+    if (rl.exceedsRowLimitPotencial) {
+      push({
+        id: GROWTH_ALERT_IDS.ROW_POTENCIAL_8060,
+        severity: 'critical',
+        shortLabel: '8060 pot.',
+        message: 'Row_size_potencial acima de 8060 B (limite in-row).',
+        hint: 'Revisar tipos e tamanhos declarados; considerar normalização ou tipos menores.'
+      });
+      score += 40;
+    }
+    if (rl.exceedsPageBody) {
+      push({
+        id: GROWTH_ALERT_IDS.ROW_POTENCIAL_PAGINA,
+        severity: 'critical',
+        shortLabel: 'página',
+        message: 'Row_size_potencial maior que o corpo útil da página (~8096 B).',
+        hint: 'Linha não cabe confortavelmente no corpo da página; expectativa de I/O elevado.'
+      });
+      score += 40;
+    }
+    if (rl.exceedsRowLimit) {
+      push({
+        id: GROWTH_ALERT_IDS.ROW_ESTRUTURAL_8060,
+        severity: 'critical',
+        shortLabel: '8060 estr.',
+        message: 'Layout estrutural (máx. declarado no modelo) acima de 8060 B.',
+        hint: 'Validar colunas que geram overflow/LOB no cenário máximo.'
+      });
+      score += 40;
+    }
+
+    var rpp = rl.rowsPerPageEstimate;
+    if (rpp > 0 && rpp <= th.rowsPerPageWarning) {
+      var fewSeverity = rpp <= th.rowsPerPageCritical ? 'critical' : 'warning';
+      push({
+        id: GROWTH_ALERT_IDS.POCAS_LINHAS_PAGINA,
+        severity: fewSeverity,
+        shortLabel: rpp + '/pág',
+        message: 'Poucas linhas por página (estimativa: ~' + rpp + ').',
+        hint: 'Linhas largas aumentam páginas lidas em scans; reduzir largura da linha ou índices covering.'
+      });
+      if (rpp <= th.rowsPerPageCritical) score += 20;
+      else score += 10;
+    }
+
+    var pk = ta.pk || {};
+    var capped1M = maxSc && maxSc.projections && maxSc.projections[th.pkCapTarget] &&
+      maxSc.projections[th.pkCapTarget].cappedByPk;
+    if (pk.maxRows != null && (pk.maxRows < th.pkCapTarget || capped1M)) {
+      push({
+        id: GROWTH_ALERT_IDS.PK_CAPACIDADE,
+        severity: 'warning',
+        shortLabel: 'PK',
+        message: pk.maxRows != null
+          ? 'PK limita capacidade (máx. ' + pk.maxRows.toLocaleString('pt-BR') + ' linhas, tipo ' + (pk.type || '?') + ').'
+          : 'Projeção de 1M linhas limitada pela PK.',
+        hint: 'Planejar migração do tipo da PK antes de atingir o teto.'
+      });
+      score += 5;
+    }
+
+    if (maxData && maxData.lobColumns && maxData.lobColumns.length > 0) {
+      push({
+        id: GROWTH_ALERT_IDS.LOB_NA_LINHA,
+        severity: 'warning',
+        shortLabel: 'LOB',
+        message: maxData.lobColumns.length + ' coluna(s) com ponteiro LOB no cenário máximo.',
+        hint: 'Evitar filtros/joins em colunas LOB; avaliar armazenamento externo ou compressão.'
+      });
+      score += 15;
+    }
+
+    if (maxData && maxData.overflowColumns && maxData.overflowColumns.length > 0) {
+      push({
+        id: GROWTH_ALERT_IDS.OVERFLOW_PROJETADO,
+        severity: 'warning',
+        shortLabel: 'overflow',
+        message: maxData.overflowColumns.length + ' coluna(s) com overflow projetado no cenário máximo.',
+        hint: 'Reduzir largura in-row; revisar índices com colunas largas incluídas.'
+      });
+      score += 15;
+    }
+
+    var ncCount = ta.ncIndexCount != null ? ta.ncIndexCount : 0;
+    var ncHeavy = maxSc && maxSc.ncIndexBytesPerRow > maxSc.dataRowBytes;
+    var manyNc = ncCount > th.maxNcIndexes;
+    if (ncHeavy || manyNc) {
+      var msgParts = [];
+      if (ncHeavy) {
+        msgParts.push('índices NC somam mais bytes/linha (' + maxSc.ncIndexBytesPerRow + ' B) que os dados (' +
+          maxSc.dataRowBytes + ' B)');
+      }
+      if (manyNc) msgParts.push(ncCount + ' índices NC (limite sugerido: ' + th.maxNcIndexes + ')');
+      push({
+        id: GROWTH_ALERT_IDS.CUSTO_INDICES_NC,
+        severity: 'warning',
+        shortLabel: 'NC',
+        message: msgParts.join('; ') + '.',
+        hint: 'Consolidar ou remover índices redundantes; revisar colunas INCLUDE.'
+      });
+      score += 10;
+    }
+
+    if (score > 100) score = 100;
+
+    var counts = { critical: 0, warning: 0 };
+    var highestSeverity = null;
+    items.forEach(function (it) {
+      if (it.severity === 'critical') counts.critical++;
+      else counts.warning++;
+      if (it.severity === 'critical') highestSeverity = 'critical';
+      else if (!highestSeverity) highestSeverity = 'warning';
+    });
+
+    return {
+      items: items,
+      score: score,
+      highestSeverity: highestSeverity,
+      hasAny: items.length > 0,
+      counts: counts
+    };
+  }
+
   function analyzeTable(table) {
     var colList = table.columnOrder.map(function (n) { return table.columns[n]; });
     var pk = findPrimaryKey(table);
@@ -1113,12 +1272,13 @@
       projections: potencialProjections
     };
 
-    return {
+    var analysis = {
       key: table.key,
       schema: table.schema,
       name: table.name,
       columnCount: table.columnOrder.length,
       indexCount: table.indexList.length,
+      ncIndexCount: countNcIndexes(table),
       pk: pk,
       rowLayout: rowLayout,
       ncIndexesStructural: ncStructural,
@@ -1126,6 +1286,8 @@
       scenarios: scenarios,
       potencial: potencial
     };
+    analysis.alerts = evaluateTableAlerts(analysis);
+    return analysis;
   }
 
   function analyzeDatabase(parsed) {
@@ -1388,8 +1550,11 @@
 
   Object.assign(SqlHelp, {
     GROWTH_HEADERS: GROWTH_HEADERS,
+    GROWTH_ALERT_IDS: GROWTH_ALERT_IDS,
+    GROWTH_ALERT_THRESHOLDS: GROWTH_ALERT_THRESHOLDS,
     SCENARIOS: SCENARIOS,
     ROW_COUNTS: ROW_COUNTS,
+    evaluateTableAlerts: evaluateTableAlerts,
     parseGrowthLog: parseGrowthLog,
     getTypeColorClass: getTypeColorClass,
     storageModeLabel: storageModeLabel,

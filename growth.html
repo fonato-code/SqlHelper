@@ -135,18 +135,17 @@
                 <select class="form-select form-select-sm mb-2" v-model="tableFilterMode">
                   <option value="all">Todas</option>
                   <option value="alerts">
-                    Com alerta de tamanho ({{ alertTableCount }})
+                    Com alertas ({{ alertTableCount }})
+                  </option>
+                  <option value="critical">
+                    Somente críticos ({{ criticalAlertTableCount }})
                   </option>
                 </select>
                 <div class="table-sidebar">
                   <div class="list-group list-group-flush">
                     <button v-for="t in filteredTables" :key="t.key" type="button"
                             class="list-group-item list-group-item-action growth-table-list-item"
-                            :class="{
-                              active: selectedTableKey === t.key,
-                              'growth-table-list-item--alert': t.hasSizeAlert && selectedTableKey !== t.key,
-                              'growth-table-list-item--alert-active': t.hasSizeAlert && selectedTableKey === t.key
-                            }"
+                            :class="Object.assign({ active: selectedTableKey === t.key }, tableListAlertClass(t))"
                             @click="selectTable(t.key)">
                       <span class="mono d-block text-truncate">{{ t.schema }}.{{ t.name }}</span>
                       <span class="small d-block growth-table-list-metrics">
@@ -154,16 +153,17 @@
                           {{ formatBytes(t.rowSizePotencial) }} pot.
                         </span>
                         <span class="text-muted mx-1">·</span>
-                        <span class="mono text-muted">{{ formatBytes(t.bytesPerRow) }} estrut.</span>
-                        <span v-if="t.hasSizeAlert" class="badge ms-1"
-                              :class="t.exceedsPageBody ? 'bg-danger' : 'bg-warning text-dark'"
-                              :title="t.exceedsPageBody
-                                ? 'Row_size_potencial maior que o corpo útil da página (8 KB − 96 B)'
-                                : 'Row_size_potencial acima do limite in-row (8060 B)'">
-                          <i class="fal fa-exclamation-triangle"></i>
-                          {{ t.exceedsPageBody ? 'página' : '8060' }}
+                        <span class="mono"
+                              :class="t.alertScore >= 70 ? 'text-danger fw-semibold' : t.alertScore >= 30 ? 'text-warning' : 'text-muted'"
+                              :title="'Score de risco (0–100)'">
+                          score {{ t.alertScore }}
                         </span>
-                        <span v-if="t.pkCapped" class="badge badge-pk-warn ms-1">PK</span>
+                        <span v-for="ab in topAlertBadges(t.alertItems, 2)" :key="ab.id"
+                              class="badge ms-1 growth-alert-badge"
+                              :class="ab.severity === 'critical' ? 'growth-alert-badge--critical' : 'growth-alert-badge--warning'"
+                              :title="ab.message">
+                          {{ ab.shortLabel }}
+                        </span>
                       </span>
                     </button>
                   </div>
@@ -195,6 +195,32 @@
                     <div class="col-12">
                       <span class="text-muted">{{ selectedTable.columnCount }} colunas · {{ selectedTable.indexCount }} índices</span>
                     </div>
+                  </div>
+                  <div class="growth-alerts-panel mt-3 pt-3 border-top">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                      <strong class="small mb-0">
+                        <i class="fal fa-shield-alt me-1"></i> Alertas de performance
+                      </strong>
+                      <span v-if="selectedTable.alerts && selectedTable.alerts.hasAny"
+                            class="badge growth-alert-score-badge"
+                            :class="alertScoreBadgeClass(selectedTable.alerts.score)"
+                            :title="'Score de risco (0–100)'">
+                        Score {{ selectedTable.alerts.score }}
+                      </span>
+                    </div>
+                    <ul v-if="selectedTable.alerts && selectedTable.alerts.items.length"
+                        class="list-unstyled small mb-0 growth-alerts-list">
+                      <li v-for="a in selectedTable.alerts.items" :key="a.id"
+                          class="growth-alerts-list-item mb-2"
+                          :class="'growth-alerts-list-item--' + a.severity">
+                        <i class="fal me-1" :class="alertItemIcon(a.severity)"></i>
+                        <span>{{ a.message }}</span>
+                        <div class="text-muted ms-3 mt-1">{{ a.hint }}</div>
+                      </li>
+                    </ul>
+                    <p v-else class="small text-muted mb-0">
+                      Nenhum alerta estrutural detectado para esta tabela.
+                    </p>
                   </div>
                 </div>
               </section>
@@ -283,53 +309,49 @@
                       </div>
                     </div>
                   </div>
+                  <ul class="nav nav-tabs growth-storage-tabs mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                      <button type="button" class="nav-link" role="tab"
+                              :class="{ active: storageTab === 'dataPage' }"
+                              :aria-selected="storageTab === 'dataPage'"
+                              @click="setStorageTab('dataPage')">
+                        <i class="fal fa-file-alt me-1"></i> Estrutura da DATA_PAGE
+                      </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                      <button type="button" class="nav-link" role="tab"
+                              :class="{ active: storageTab === 'columns' }"
+                              :aria-selected="storageTab === 'columns'"
+                              @click="setStorageTab('columns')">
+                        <i class="fal fa-table me-1"></i> Colunas
+                      </button>
+                    </li>
+                  </ul>
+
+                  <div v-show="storageTab === 'dataPage'" class="growth-storage-tab-panel">
                   <div class="row g-2 mb-3 small">
-                    <div class="col-md-3 col-lg">
-                      <span class="text-muted d-block">Bytes/linha (estrutura)</span>
-                      <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.totalBytes) }}</span>
-                      <span v-if="selectedRowLayout.exceedsRowLimit" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
-                    </div>
-                    <div class="col-md-3 col-lg">
-                      <span class="text-muted d-block" title="Soma CEILING por coluna (tamanho declarado) + overhead — fórmula do tópico «tamanho máximo de linha»; não aplica ponteiros LOB/overflow.">
-                        Row_size_potencial
-                      </span>
-                      <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.rowSizePotencial) }}</span>
-                      <span v-if="selectedRowLayout.exceedsRowLimitPotencial" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
-                      <span v-else-if="selectedRowLayout.rowSizePotencial > selectedRowLayout.totalBytes"
-                            class="badge bg-secondary ms-1"
-                            title="Maior que o layout estrutural porque assume tudo in-row no máximo declarado">
-                        +{{ formatBytes(selectedRowLayout.rowSizePotencial - selectedRowLayout.totalBytes) }}
-                      </span>
-                    </div>
-                    <div class="col-md-3 col-lg">
+                    <div class="col-md-4 col-lg">
                       <span class="text-muted d-block">
-                        Limite in-row
-                        <a v-if="growthDoc('concept', 'inRowLimit')" class="growth-doc-link ms-1"
-                           :href="growthDoc('concept', 'inRowLimit').url" target="_blank" rel="noopener noreferrer"
-                           :title="'MS Learn: ' + growthDoc('concept', 'inRowLimit').label">
-                          <i class="fal fa-external-link"></i>
-                        </a>
-                      </span>
-                      <span class="mono">{{ selectedRowLayout.rowLimitInRow }} B</span>
-                    </div>
-                    <div class="col-md-3 col-lg">
-                      <span class="text-muted d-block">
-                        Página útil
+                        Página útil (corpo)
                         <a v-if="growthDoc('concept', 'pageSize')" class="growth-doc-link ms-1"
                            :href="growthDoc('concept', 'pageSize').url" target="_blank" rel="noopener noreferrer"
                            :title="'MS Learn: ' + growthDoc('concept', 'pageSize').label">
                           <i class="fal fa-external-link"></i>
                         </a>
                       </span>
-                      <span class="mono">{{ selectedRowLayout.pageDataBytes }} B</span>
+                      <span class="mono fw-semibold">{{ selectedRowLayout.pageDataBytes }} B</span>
+                      <span class="text-muted"> · 8192 B total</span>
                     </div>
-                    <div class="col-md-3 col-lg">
+                    <div class="col-md-4 col-lg">
+                      <span class="text-muted d-block">Bytes/linha na página (estrutura)</span>
+                      <span class="mono fw-semibold">{{ formatBytes(selectedRowLayout.totalBytes) }}</span>
+                    </div>
+                    <div class="col-md-4 col-lg">
                       <span class="text-muted d-block">Linhas/página (est.)</span>
-                      <span class="mono">{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }}</span>
+                      <span class="mono fw-semibold">{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }}</span>
                     </div>
                   </div>
-                  <div class="growth-storage-flow mb-4">
-                    <!-- 1. Estrutura de uma linha -->
+                  <div class="growth-storage-flow mb-2">
                     <div class="growth-detail-panel mb-3" v-if="selectedRowLayout.rowDiagram.rowStructureDetail">
                       <h6 class="growth-detail-panel-title">
                         <span class="growth-flow-step">1</span>
@@ -410,11 +432,10 @@
                       </p>
                     </div>
 
-                    <!-- 2. Página de dados (8 KB) -->
                     <div class="growth-detail-panel mb-3">
                       <h6 class="growth-detail-panel-title">
                         <span class="growth-flow-step">2</span>
-                        <i class="fal fa-file-alt me-1"></i> Página de dados (8 KB)
+                        <i class="fal fa-file-alt me-1"></i> Página de dados (8 KB) — DATA_PAGE
                         <a v-if="growthDoc('concept', 'pageSize')" class="growth-doc-link ms-1"
                            :href="growthDoc('concept', 'pageSize').url" target="_blank" rel="noopener noreferrer"
                            :title="'MS Learn: páginas de dados'">
@@ -593,6 +614,43 @@
                     </div>
                     </div>
                   </div>
+                  <p class="small text-muted mb-0">
+                    <i class="fal fa-info-circle me-1"></i>
+                    Uma página <code>DATA_PAGE</code> (8 KB, <code>m_type = 1</code>). Não inclui páginas LOB nem ROW_OVERFLOW.
+                  </p>
+                  </div>
+
+                  <div v-show="storageTab === 'columns'" class="growth-storage-tab-panel">
+                  <div class="row g-2 mb-3 small">
+                    <div class="col-md-4 col-lg">
+                      <span class="text-muted d-block">Bytes/linha (estrutura)</span>
+                      <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.totalBytes) }}</span>
+                      <span v-if="selectedRowLayout.exceedsRowLimit" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
+                    </div>
+                    <div class="col-md-4 col-lg">
+                      <span class="text-muted d-block" title="Soma CEILING por coluna (tamanho declarado) + overhead — fórmula do tópico «tamanho máximo de linha»; não aplica ponteiros LOB/overflow.">
+                        Row_size_potencial
+                      </span>
+                      <span class="mono fw-semibold fs-6">{{ formatBytes(selectedRowLayout.rowSizePotencial) }}</span>
+                      <span v-if="selectedRowLayout.exceedsRowLimitPotencial" class="badge bg-warning text-dark ms-1">>&nbsp;8060 B</span>
+                      <span v-else-if="selectedRowLayout.rowSizePotencial > selectedRowLayout.totalBytes"
+                            class="badge bg-secondary ms-1"
+                            title="Maior que o layout estrutural porque assume tudo in-row no máximo declarado">
+                        +{{ formatBytes(selectedRowLayout.rowSizePotencial - selectedRowLayout.totalBytes) }}
+                      </span>
+                    </div>
+                    <div class="col-md-4 col-lg">
+                      <span class="text-muted d-block">
+                        Limite in-row
+                        <a v-if="growthDoc('concept', 'inRowLimit')" class="growth-doc-link ms-1"
+                           :href="growthDoc('concept', 'inRowLimit').url" target="_blank" rel="noopener noreferrer"
+                           :title="'MS Learn: ' + growthDoc('concept', 'inRowLimit').label">
+                          <i class="fal fa-external-link"></i>
+                        </a>
+                      </span>
+                      <span class="mono">{{ selectedRowLayout.rowLimitInRow }} B</span>
+                    </div>
+                  </div>
 
                   <div class="growth-type-legend small mb-2">
                     <span class="growth-type-string">texto</span>
@@ -710,6 +768,7 @@
                     Tamanhos declarados no esquema (máximo). Cenários min/médio/máx aplicam-se apenas em
                     <strong>Projeções de tamanho</strong>. Não inclui compressão, sparse, fill factor nem páginas LOB/overflow externas.
                   </p>
+                  </div>
                 </div>
               </section>
 

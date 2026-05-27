@@ -24,11 +24,15 @@
         growthDetailModal: null,
         growthDetailModalInstance: null,
         showGrowthDocs: false,
+        storageTab: 'dataPage',
         _growthDetailPopovers: []
       };
     },
     watch: {
       selectedTableKey: function () {
+        this.refreshAllGrowthDetailPopovers();
+      },
+      storageTab: function () {
         this.refreshAllGrowthDetailPopovers();
       }
     },
@@ -52,8 +56,7 @@
         return this.analysis.tables.map(function (ta) {
           var pkCap = ta.pk.maxRows != null && 1000000 > ta.pk.maxRows;
           var rl = ta.rowLayout;
-          var hasSizeAlert = !!(rl.exceedsRowLimitPotencial || rl.exceedsPageBody ||
-            rl.exceedsRowLimit);
+          var al = ta.alerts || { hasAny: false, score: 0, highestSeverity: null, items: [], counts: { critical: 0, warning: 0 } };
           return {
             key: ta.key,
             schema: ta.schema,
@@ -63,7 +66,11 @@
             exceedsRowLimit: rl.exceedsRowLimit,
             exceedsRowLimitPotencial: rl.exceedsRowLimitPotencial,
             exceedsPageBody: rl.exceedsPageBody,
-            hasSizeAlert: hasSizeAlert,
+            hasSizeAlert: al.hasAny,
+            alertScore: al.score,
+            alertHighestSeverity: al.highestSeverity,
+            alertItems: al.items,
+            alertCounts: al.counts,
             pkCapped: pkCap,
             columnCount: ta.columnCount,
             indexCount: ta.indexCount
@@ -73,11 +80,22 @@
       alertTableCount() {
         return this.tableSummaries.filter(function (t) { return t.hasSizeAlert; }).length;
       },
+      criticalAlertTableCount() {
+        return this.tableSummaries.filter(function (t) {
+          return t.alertHighestSeverity === 'critical';
+        }).length;
+      },
       filteredTables() {
-        var list = this.tableSummaries;
+        var list = this.tableSummaries.slice();
         if (this.tableFilterMode === 'alerts') {
           list = list.filter(function (t) { return t.hasSizeAlert; });
+        } else if (this.tableFilterMode === 'critical') {
+          list = list.filter(function (t) { return t.alertHighestSeverity === 'critical'; });
         }
+        list.sort(function (a, b) {
+          if (b.alertScore !== a.alertScore) return b.alertScore - a.alertScore;
+          return a.key.localeCompare(b.key);
+        });
         var q = (this.tableFilter || '').trim().toLowerCase();
         if (!q) return list;
         return list.filter(function (t) {
@@ -181,6 +199,35 @@
           capped: p.cappedByPk
         };
       },
+      alertScoreBadgeClass(score) {
+        if (score >= 70) return 'bg-danger';
+        if (score >= 30) return 'bg-warning text-dark';
+        return 'bg-secondary';
+      },
+      tableListAlertClass(t) {
+        if (!t.hasSizeAlert) return {};
+        if (t.alertHighestSeverity === 'critical') {
+          return {
+            'growth-table-list-item--alert-critical': this.selectedTableKey !== t.key,
+            'growth-table-list-item--alert-critical-active': this.selectedTableKey === t.key
+          };
+        }
+        return {
+          'growth-table-list-item--alert': this.selectedTableKey !== t.key,
+          'growth-table-list-item--alert-active': this.selectedTableKey === t.key
+        };
+      },
+      topAlertBadges(items, limit) {
+        var max = limit || 2;
+        var sorted = (items || []).slice().sort(function (a, b) {
+          if (a.severity === b.severity) return 0;
+          return a.severity === 'critical' ? -1 : 1;
+        });
+        return sorted.slice(0, max);
+      },
+      alertItemIcon(severity) {
+        return severity === 'critical' ? 'fa-exclamation-circle' : 'fa-exclamation-triangle';
+      },
       formatTypeLabel(col) {
         var s = col.type;
         if (col.lengthDisplay) s += '(' + col.lengthDisplay + ')';
@@ -263,7 +310,10 @@
       selectTable(key) {
         this.selectedTableKey = key;
         var self = this;
-        this.$nextTick(function () { self.refreshGrowthDetailPopovers(); });
+        this.$nextTick(function () { self.refreshAllGrowthDetailPopovers(); });
+      },
+      setStorageTab(tab) {
+        this.storageTab = tab;
       },
       disposeGrowthDetailPopovers() {
         if (this._growthDetailPopovers && this._growthDetailPopovers.length) {
