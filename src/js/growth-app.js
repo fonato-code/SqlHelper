@@ -21,8 +21,16 @@
         toastMessage: '',
         breakdownModal: null,
         breakdownModalInstance: null,
-        showGrowthDocs: false
+        pageHeaderDetailModal: null,
+        pageHeaderDetailModalInstance: null,
+        showGrowthDocs: false,
+        _phPopovers: []
       };
+    },
+    watch: {
+      selectedTableKey: function () {
+        this.refreshPageHeaderPopovers();
+      }
     },
     computed: {
       growthDocSections() {
@@ -167,6 +175,8 @@
           var first = this.filteredTables[0] || this.tableSummaries[0];
           this.selectedTableKey = first ? first.key : '';
         }
+        var self = this;
+        this.$nextTick(function () { self.refreshPageHeaderPopovers(); });
       },
       async onFile(ev) {
         var file = ev.target.files && ev.target.files[0];
@@ -219,6 +229,64 @@
       },
       selectTable(key) {
         this.selectedTableKey = key;
+        var self = this;
+        this.$nextTick(function () { self.refreshPageHeaderPopovers(); });
+      },
+      disposePageHeaderPopovers() {
+        if (this._phPopovers && this._phPopovers.length) {
+          this._phPopovers.forEach(function (p) {
+            try { p.dispose(); } catch (_) { /* already disposed */ }
+          });
+        }
+        this._phPopovers = [];
+      },
+      refreshPageHeaderPopovers() {
+        this.disposePageHeaderPopovers();
+        var self = this;
+        this.$nextTick(function () {
+          if (!self.selectedRowLayout || !self.selectedRowLayout.pageDiagram || !bootstrap) return;
+          var fields = self.selectedRowLayout.pageDiagram.pageHeaderDetail.fields;
+          fields.forEach(function (f) {
+            if (f.detailMode !== 'popover') return;
+            var el = document.getElementById('ph-popover-' + f.id);
+            if (!el) return;
+            var pop = new bootstrap.Popover(el, {
+              html: true,
+              trigger: 'focus',
+              container: 'body',
+              customClass: 'growth-ph-popover',
+              title: f.detailTitle,
+              content: f.detailHtml,
+              sanitize: false
+            });
+            self._phPopovers.push(pop);
+          });
+        });
+      },
+      openPageHeaderFieldDetail(field) {
+        if (!field || !field.detailMode) return;
+        if (field.detailMode === 'modal') {
+          this.openPageHeaderDetailModal(field);
+        }
+      },
+      openPageHeaderDetailModal(field) {
+        this.pageHeaderDetailModal = {
+          title: field.detailTitle || field.label,
+          html: field.detailHtml || ''
+        };
+        var self = this;
+        this.$nextTick(function () {
+          var el = document.getElementById('pageHeaderDetailModal');
+          if (!el || !bootstrap) return;
+          if (!self.pageHeaderDetailModalInstance) {
+            self.pageHeaderDetailModalInstance = new bootstrap.Modal(el);
+          }
+          self.pageHeaderDetailModalInstance.show();
+        });
+      },
+      closePageHeaderDetail() {
+        if (this.pageHeaderDetailModalInstance) this.pageHeaderDetailModalInstance.hide();
+        this.pageHeaderDetailModal = null;
       },
       showModal(modalData) {
         this.breakdownModal = modalData;

@@ -5,6 +5,7 @@ var fs = require('fs');
 
 global.SqlHelp = {};
 require(path.join(__dirname, '../src/js/sqlhelp-sql.js'));
+require(path.join(__dirname, '../src/js/growth-page-header-details.js'));
 require(path.join(__dirname, '../src/js/sqlhelp-growth-lib.js'));
 
 var failed = 0;
@@ -94,6 +95,13 @@ assert(slotMany.slots[1].offsetValue === 196, 'second row contiguous at 96+100')
 
 var pageDiag = tiny.rowLayout.pageDiagram;
 assert(pageDiag.pageHeaderDetail && pageDiag.pageHeaderDetail.total === 96, 'pageDiagram has header detail');
+
+var phFields = pageDiag.pageHeaderDetail.fields;
+var typeField = phFields.find(function (f) { return f.id === 'type'; });
+var pageIdField = phFields.find(function (f) { return f.id === 'pageId'; });
+assert(typeField && typeField.detailMode === 'modal', 'm_type has modal detail');
+assert(pageIdField && pageIdField.detailMode === 'popover', 'm_pageId has popover detail');
+assert(pageDiag.pageHeaderDetail.attributionUrl, 'SQLskills attribution URL');
 assert(pageDiag.slotArrayDetail && pageDiag.slotArrayDetail.slots.length >= 1, 'pageDiagram has slot detail');
 
 var rsDetail = tiny.rowLayout.rowDiagram.rowStructureDetail;

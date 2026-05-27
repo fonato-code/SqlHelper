@@ -418,9 +418,9 @@
                     </div>
 
                     <!-- 3 e 4. Page Header + Row Offset Array -->
-                    <div class="row g-3" v-if="selectedRowLayout.pageDiagram.pageHeaderDetail">
+                    <div class="row g-3 growth-page-pair-row" v-if="selectedRowLayout.pageDiagram.pageHeaderDetail">
                     <div class="col-lg-6">
-                      <div class="growth-detail-panel h-100">
+                      <div class="growth-detail-panel h-100 growth-detail-panel--ph">
                         <h6 class="growth-detail-panel-title">
                           <span class="growth-flow-step">3</span>
                           <i class="fal fa-info-circle me-1"></i> Page Header (96 B)
@@ -431,12 +431,14 @@
                           </a>
                         </h6>
                         <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.pageHeaderDetail.note }}</p>
+                        <div class="growth-detail-panel__body">
                         <div class="growth-ph-bar" role="img"
                              :aria-label="'Mapa dos ' + selectedRowLayout.pageDiagram.pageHeaderDetail.total + ' bytes do page header'">
                           <div v-for="f in selectedRowLayout.pageDiagram.pageHeaderDetail.fields" :key="f.id"
-                               class="growth-ph-seg" :class="'growth-ph-seg--' + f.cssClass"
+                               class="growth-ph-seg" :class="['growth-ph-seg--' + f.cssClass, { 'growth-ph-seg--clickable': f.detailMode }]"
                                :style="{ flexGrow: f.bytes }"
-                               :title="f.label + ' (' + f.techName + '): ' + f.bytes + ' B'">
+                               :title="f.label + ' (' + f.techName + '): ' + f.bytes + ' B'"
+                               @click="f.detailMode && openPageHeaderFieldDetail(f)">
                             <span class="growth-ph-seg-bytes">{{ f.bytes }}</span>
                           </div>
                         </div>
@@ -456,18 +458,45 @@
                                   <span class="growth-ph-dot" :class="'growth-ph-dot--' + f.cssClass"></span>
                                   {{ f.label }}
                                   <span class="text-muted font-monospace small">({{ f.techName }})</span>
+                                  <button v-if="f.detailMode === 'popover'" type="button"
+                                          class="growth-ph-info-btn ms-1"
+                                          :id="'ph-popover-' + f.id"
+                                          tabindex="0"
+                                          :title="'Detalhes: ' + f.detailTitle"
+                                          @click.stop>
+                                    <i class="fal fa-info-circle"></i>
+                                  </button>
+                                  <button v-else-if="f.detailMode === 'modal'" type="button"
+                                          class="growth-ph-info-btn ms-1"
+                                          :title="'Ver detalhes: ' + f.detailTitle"
+                                          @click.stop="openPageHeaderFieldDetail(f)">
+                                    <i class="fal fa-expand-alt"></i>
+                                  </button>
                                 </td>
                                 <td class="text-end font-monospace">{{ f.bytes }}</td>
                                 <td class="font-monospace small">{{ f.offset }}–{{ f.offset + f.bytes - 1 }}</td>
-                                <td class="small text-muted">{{ f.description }}</td>
+                                <td class="small text-muted">
+                                  {{ f.description }}
+                                  <button v-if="f.detailMode === 'modal'" type="button"
+                                          class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                          @click="openPageHeaderFieldDetail(f)">Ver tabela</button>
+                                </td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
+                        <p v-if="selectedRowLayout.pageDiagram.pageHeaderDetail.attributionUrl"
+                           class="growth-ph-attribution small text-muted mb-0">
+                          Detalhes baseados em
+                          <a :href="selectedRowLayout.pageDiagram.pageHeaderDetail.attributionUrl"
+                             target="_blank" rel="noopener noreferrer">Paul S. Randal (SQLskills)</a>.
+                        </p>
+                        </div>
                       </div>
                     </div>
                     <div class="col-lg-6" v-if="selectedRowLayout.pageDiagram.slotArrayDetail">
-                      <div class="growth-detail-panel h-100" :class="{ 'growth-detail-panel--single-slot': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                      <div class="growth-detail-panel h-100 growth-detail-panel--slots"
+                           :class="{ 'growth-detail-panel--single-slot': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
                         <h6 class="growth-detail-panel-title">
                           <span class="growth-flow-step">4</span>
                           <i class="fal fa-link me-1"></i> Row Offset Array
@@ -478,6 +507,7 @@
                           </a>
                         </h6>
                         <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.slotArrayDetail.explanation }}</p>
+                        <div class="growth-detail-panel__body">
                         <div class="growth-slot-viz">
                           <div class="growth-slot-viz-body">
                             <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'pair-' + s.slotIndex"
@@ -528,6 +558,7 @@
                               </tr>
                             </tbody>
                           </table>
+                        </div>
                         </div>
                       </div>
                     </div>
@@ -696,6 +727,22 @@
       </template>
     </main>
 
+    <div class="modal fade" id="pageHeaderDetailModal" tabindex="-1" aria-labelledby="pageHeaderDetailModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" v-if="pageHeaderDetailModal">
+          <div class="modal-header">
+            <h5 class="modal-title" id="pageHeaderDetailModalLabel">{{ pageHeaderDetailModal.title }}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"
+                    @click="closePageHeaderDetail"></button>
+          </div>
+          <div class="modal-body growth-ph-modal-body" v-html="pageHeaderDetailModal.html"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" @click="closePageHeaderDetail">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal fade" id="rowBreakdownModal" tabindex="-1" aria-labelledby="rowBreakdownModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content" v-if="breakdownModal">
@@ -840,6 +887,7 @@
   <script src="src/js/bootstrap-v5.3.8.js"></script>
   <script src="src/js/sqlhelp-sql.js"></script>
   <script src="src/js/sqlhelp-ui.js"></script>
+  <script src="src/js/growth-page-header-details.js"></script>
   <script src="src/js/sqlhelp-growth-lib.js"></script>
   <script src="src/js/growth-app.js"></script>
 </body>

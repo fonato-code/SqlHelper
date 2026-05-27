@@ -50,14 +50,14 @@
       description: 'Encadeamento duplo na estrutura do índice.', cssClass: 'ph-link' },
     { id: 'nextPage', label: 'Próxima página', techName: 'm_nextPage', bytes: 8, offset: 23,
       description: 'Próximo nó na mesma cadeia de páginas.', cssClass: 'ph-link' },
-    { id: 'pminRec', label: 'Offset pminRec', techName: 'm_pminRec', bytes: 2, offset: 31,
-      description: 'Menor offset de registro ghost na página.', cssClass: 'ph-space' },
+    { id: 'pminRec', label: 'pminlen', techName: 'pminlen', bytes: 2, offset: 31,
+      description: 'Tamanho da parte fixa dos registros na página.', cssClass: 'ph-space' },
     { id: 'freeData', label: 'Início espaço livre', techName: 'm_freeData', bytes: 2, offset: 33,
       description: 'Onde começa o bloco livre no corpo.', cssClass: 'ph-space' },
     { id: 'freeCnt', label: 'Bytes livres', techName: 'm_freeCnt', bytes: 2, offset: 35,
       description: 'Quantidade de bytes livres contíguos.', cssClass: 'ph-space' },
-    { id: 'reserved', label: 'Reservado', techName: 'm_reserved', bytes: 2, offset: 37,
-      description: 'Campo reservado / alinhamento.', cssClass: 'ph-space' },
+    { id: 'reserved', label: 'Reserva transação', techName: 'm_reservedCnt', bytes: 2, offset: 37,
+      description: 'Bytes livres reservados por transações ativas.', cssClass: 'ph-space' },
     { id: 'slotCnt', label: 'Qtd. slots', techName: 'm_slotCnt', bytes: 2, offset: 39,
       description: 'Número de entradas no Row Offset Array.', cssClass: 'ph-slot' },
     { id: 'lsn', label: 'LSN da página', techName: 'm_lsn', bytes: 10, offset: 41,
@@ -743,9 +743,13 @@
       bodySum: bodySum,
       formula: PAGE_HEADER + ' + ' + bodySum + ' = ' + (PAGE_HEADER + bodySum) + ' B (página 8 KB)',
       pageHeaderDetail: {
-        fields: PAGE_HEADER_FIELDS,
+        fields: (typeof GrowthPageHeaderDetails !== 'undefined'
+          ? GrowthPageHeaderDetails.enrichPageHeaderFields(PAGE_HEADER_FIELDS)
+          : PAGE_HEADER_FIELDS.slice()),
         total: PAGE_HEADER,
-        note: 'Sempre ocupa os bytes 0–95 de cada página de dados (tipo 1).'
+        note: 'Sempre ocupa os bytes 0–95 de cada página de dados (tipo 1).',
+        attributionUrl: typeof GrowthPageHeaderDetails !== 'undefined'
+          ? GrowthPageHeaderDetails.SQLSKILLS_PAGE_URL : null
       },
       slotArrayDetail: slotDetail
     };
