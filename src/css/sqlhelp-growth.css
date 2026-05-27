@@ -394,49 +394,93 @@ tr.growth-summary-row > td {
 .growth-ph-dot--ph-log { background: #845ef7; }
 .growth-ph-dot--ph-other { background: #868e96; }
 
-/* Record header mini bar */
-.growth-rh-bar {
+/* Row structure detail (byte map) */
+.growth-rs-bar {
   display: flex;
-  height: 22px;
+  width: 100%;
+  height: 28px;
   border-radius: 0.25rem;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
-.growth-rh-seg {
-  background: #4dabf7;
-  color: #fff;
+.growth-rs-seg {
+  min-width: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
-  min-width: 18px;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.growth-rh-seg:last-child {
+.growth-rs-seg:last-child {
   border-right: none;
 }
 
-.growth-rh-seg-label {
+.growth-rs-seg-bytes {
   font-size: 0.55rem;
   font-family: ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
 }
 
-.growth-rh-legend li {
-  margin-bottom: 0.15rem;
+.growth-rs-seg--row-hdr { background: #339af0; }
+.growth-rs-seg--row-null { background: #4dabf7; }
+.growth-rs-seg--row-fixed { background: #868e96; }
+.growth-rs-seg--row-var { background: #fab005; color: #212529; }
+.growth-rs-seg--row-var .growth-rs-seg-bytes { color: #212529; text-shadow: none; }
+.growth-rs-seg--row-var-data { background: #ffd43b; color: #212529; }
+.growth-rs-seg--row-var-data .growth-rs-seg-bytes { color: #212529; text-shadow: none; }
+
+.growth-rs-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
 }
 
-/* Slot array visualization */
+.growth-rs-table th,
+.growth-rs-table td {
+  font-size: 0.72rem;
+  vertical-align: top;
+}
+
+.growth-rs-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.growth-rs-dot--row-hdr { background: #339af0; }
+.growth-rs-dot--row-null { background: #4dabf7; }
+.growth-rs-dot--row-fixed { background: #868e96; }
+.growth-rs-dot--row-var { background: #fab005; }
+.growth-rs-dot--row-var-data { background: #ffd43b; }
+
+.growth-storage-flow .growth-flow-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--sidebar-active, #0d6efd);
+  color: #fff;
+  vertical-align: middle;
+}
+
+/* Slot array visualization — uma linha por par Row ↔ Slot */
 .growth-slot-viz {
   margin-bottom: 0.75rem;
 }
 
 .growth-slot-viz-body {
-  display: grid;
-  grid-template-columns: 1fr 48px 1fr;
-  gap: 0.25rem;
-  align-items: stretch;
-  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   max-height: 280px;
   overflow-y: auto;
   padding: 0.5rem;
@@ -445,25 +489,22 @@ tr.growth-summary-row > td {
   background: rgba(0, 0, 0, 0.15);
 }
 
-.growth-slot-viz-rows,
-.growth-slot-viz-slots {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 0.35rem;
+.growth-slot-viz-pair {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr;
+  gap: 0.25rem;
+  align-items: center;
 }
 
-.growth-slot-viz-connectors {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 0.35rem;
+.growth-slot-viz-pair--highlight .growth-slot-viz-row-block,
+.growth-slot-viz-pair--highlight .growth-slot-viz-slot-chip {
+  box-shadow: 0 0 0 2px #339af0;
 }
 
 .growth-slot-viz-connector {
-  flex: 0 0 auto;
-  height: 36px;
   position: relative;
+  height: 2px;
+  align-self: center;
 }
 
 .growth-slot-viz-connector::before {
@@ -471,20 +512,20 @@ tr.growth-summary-row > td {
   position: absolute;
   left: 0;
   right: 0;
-  top: 50%;
-  border-top: 2px dashed rgba(134, 142, 150, 0.85);
+  top: 0;
+  border-top: 2px dashed rgba(134, 142, 150, 0.9);
 }
 
 .growth-slot-viz-connector::after {
   content: '';
   position: absolute;
-  right: 0;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
+  right: -1px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #fcc419;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .growth-slot-viz-row-block {

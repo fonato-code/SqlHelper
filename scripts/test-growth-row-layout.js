@@ -96,6 +96,11 @@ var pageDiag = tiny.rowLayout.pageDiagram;
 assert(pageDiag.pageHeaderDetail && pageDiag.pageHeaderDetail.total === 96, 'pageDiagram has header detail');
 assert(pageDiag.slotArrayDetail && pageDiag.slotArrayDetail.slots.length >= 1, 'pageDiagram has slot detail');
 
+var rsDetail = tiny.rowLayout.rowDiagram.rowStructureDetail;
+var rsSum = rsDetail.fields.reduce(function (s, f) { return s + f.bytes; }, 0);
+assert(rsSum === tiny.rowLayout.totalBytes, 'rowStructureDetail sums to totalBytes');
+assert(rsDetail.fields[0].offset === 0, 'row structure starts at offset 0');
+
 assert(SqlHelp.GROWTH_DOCS && SqlHelp.GROWTH_DOCS.sections.length >= 3, 'GROWTH_DOCS sections');
 assert(SqlHelp.getGrowthDoc('storageMode', 'lob_root').url.indexOf('learn.microsoft.com') !== -1, 'LOB doc URL');
 assert(SqlHelp.getGrowthTypeDocUrl('varchar').indexOf('char-and-varchar') !== -1, 'varchar type doc');

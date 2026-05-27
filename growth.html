@@ -324,17 +324,20 @@
                       <span class="mono">{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }}</span>
                     </div>
                   </div>
-                  <div class="row g-4 mb-4">
-                    <div class="col-lg-5">
-                      <h6 class="small fw-semibold text-uppercase text-muted mb-2">
-                        <i class="fal fa-layer-group me-1"></i> Estrutura de uma linha
+                  <div class="growth-storage-flow mb-4">
+                    <!-- 1. Estrutura de uma linha -->
+                    <div class="growth-detail-panel mb-3" v-if="selectedRowLayout.rowDiagram.rowStructureDetail">
+                      <h6 class="growth-detail-panel-title">
+                        <span class="growth-flow-step">1</span>
+                        <i class="fal fa-layer-group me-1"></i> Estrutura de uma linha ({{ selectedRowLayout.totalBytes }} B)
                         <a v-if="growthDoc('concept', 'recordHeader')" class="growth-doc-link ms-1"
                            :href="growthDoc('concept', 'recordHeader').url" target="_blank" rel="noopener noreferrer"
                            :title="'MS Learn: ' + growthDoc('concept', 'recordHeader').label">
                           <i class="fal fa-external-link"></i>
                         </a>
                       </h6>
-                      <div class="growth-row-diagram">
+                      <p class="small text-muted mb-2">{{ selectedRowLayout.rowDiagram.rowStructureDetail.note }}</p>
+                      <div class="growth-row-diagram mb-2">
                         <div v-for="seg in selectedRowLayout.rowDiagram.segments" :key="seg.id"
                              class="growth-row-seg" :class="'growth-row-seg--' + seg.cssClass"
                              :style="{ width: rowSegWidth(seg.bytes, selectedRowLayout.rowDiagram.totalBytes) }"
@@ -343,27 +346,45 @@
                           <span class="growth-row-seg-bytes">{{ seg.bytes }} B</span>
                         </div>
                       </div>
-                      <div v-if="selectedRowLayout.rowDiagram.recordHeaderDetail" class="mt-2">
-                        <div class="growth-rh-bar" role="img" aria-label="Record header 12 bytes">
-                          <div v-for="f in selectedRowLayout.rowDiagram.recordHeaderDetail.fields" :key="f.id"
-                               class="growth-rh-seg"
-                               :style="{ flexGrow: f.bytes }"
-                               :title="f.label + ': ' + f.bytes + ' B'">
-                            <span class="growth-rh-seg-label">{{ f.bytes }}B</span>
-                          </div>
+                      <div class="growth-rs-bar" role="img"
+                           :aria-label="'Mapa dos ' + selectedRowLayout.rowDiagram.rowStructureDetail.total + ' bytes da linha'">
+                        <div v-for="f in selectedRowLayout.rowDiagram.rowStructureDetail.fields" :key="f.id"
+                             class="growth-rs-seg" :class="'growth-rs-seg--' + f.cssClass"
+                             :style="{ flexGrow: f.bytes }"
+                             :title="f.label + ': ' + f.bytes + ' B'">
+                          <span class="growth-rs-seg-bytes">{{ f.bytes }}</span>
                         </div>
-                        <ul class="list-unstyled small text-muted mb-0 mt-1 growth-rh-legend">
-                          <li v-for="f in selectedRowLayout.rowDiagram.recordHeaderDetail.fields" :key="'rh-' + f.id">
-                            <strong>{{ f.label }}</strong> ({{ f.bytes }} B) — {{ f.description }}
-                          </li>
-                        </ul>
                       </div>
-                      <p class="small text-muted mt-2 mb-0">
-                        Uma linha = header + null bitmap + dados fixos (bits empacotados) + variáveis.
-                      </p>
+                      <div class="table-responsive growth-rs-table-wrap mt-2">
+                        <table class="table table-sm table-bordered growth-rs-table mb-0">
+                          <thead>
+                            <tr>
+                              <th>Campo</th>
+                              <th class="text-end">Bytes</th>
+                              <th>Offset na linha</th>
+                              <th>Descrição</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="f in selectedRowLayout.rowDiagram.rowStructureDetail.fields" :key="'rs-' + f.id">
+                              <td>
+                                <span class="growth-rs-dot" :class="'growth-rs-dot--' + f.cssClass"></span>
+                                {{ f.label }}
+                                <span class="text-muted font-monospace small" v-if="f.techName">({{ f.techName }})</span>
+                              </td>
+                              <td class="text-end font-monospace">{{ f.bytes }}</td>
+                              <td class="font-monospace small">{{ f.offset }}–{{ f.offset + f.bytes - 1 }}</td>
+                              <td class="small text-muted">{{ f.description }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                    <div class="col-lg-7">
-                      <h6 class="small fw-semibold text-uppercase text-muted mb-2">
+
+                    <!-- 2. Página de dados (8 KB) -->
+                    <div class="growth-detail-panel mb-3">
+                      <h6 class="growth-detail-panel-title">
+                        <span class="growth-flow-step">2</span>
                         <i class="fal fa-file-alt me-1"></i> Página de dados (8 KB)
                         <a v-if="growthDoc('concept', 'pageSize')" class="growth-doc-link ms-1"
                            :href="growthDoc('concept', 'pageSize').url" target="_blank" rel="noopener noreferrer"
@@ -388,21 +409,20 @@
                           <div><strong>8192 B</strong> por página</div>
                           <div>{{ selectedRowLayout.pageDiagram.formula }}</div>
                           <div class="mt-1" v-if="selectedRowLayout.rowsPerPageEstimate > 0">
-                            ~{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }} linhas desta tabela cabem no corpo ({{ selectedRowLayout.pageDataBytes }} B úteis).
+                            ~{{ selectedRowLayout.rowsPerPageEstimate.toLocaleString('pt-BR') }} linhas cabem no corpo
+                            ({{ selectedRowLayout.pageDataBytes }} B úteis).
                           </div>
+                          <div class="mt-2 text-muted">Ordem na página: header → linhas → espaço livre → slots (base).</div>
                         </div>
                       </div>
-                      <p class="small text-muted mt-2 mb-0">
-                        O <strong>Row Offset Array</strong> fica na base da página (slots de 2 B apontando para cada linha).
-                        Linhas empilham-se após o page header de 96 B.
-                      </p>
                     </div>
-                  </div>
 
-                  <div class="row g-3 mb-4" v-if="selectedRowLayout.pageDiagram.pageHeaderDetail">
+                    <!-- 3 e 4. Page Header + Row Offset Array -->
+                    <div class="row g-3" v-if="selectedRowLayout.pageDiagram.pageHeaderDetail">
                     <div class="col-lg-6">
-                      <div class="growth-detail-panel">
+                      <div class="growth-detail-panel h-100">
                         <h6 class="growth-detail-panel-title">
+                          <span class="growth-flow-step">3</span>
                           <i class="fal fa-info-circle me-1"></i> Page Header (96 B)
                           <a v-if="growthDoc('concept', 'pageHeader')" class="growth-doc-link ms-1"
                              :href="growthDoc('concept', 'pageHeader').url" target="_blank" rel="noopener noreferrer"
@@ -447,8 +467,9 @@
                       </div>
                     </div>
                     <div class="col-lg-6" v-if="selectedRowLayout.pageDiagram.slotArrayDetail">
-                      <div class="growth-detail-panel" :class="{ 'growth-detail-panel--single-slot': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                      <div class="growth-detail-panel h-100" :class="{ 'growth-detail-panel--single-slot': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
                         <h6 class="growth-detail-panel-title">
+                          <span class="growth-flow-step">4</span>
                           <i class="fal fa-link me-1"></i> Row Offset Array
                           <a v-if="growthDoc('concept', 'rowOffsetArray')" class="growth-doc-link ms-1"
                              :href="growthDoc('concept', 'rowOffsetArray').url" target="_blank" rel="noopener noreferrer"
@@ -459,24 +480,18 @@
                         <p class="small text-muted mb-2">{{ selectedRowLayout.pageDiagram.slotArrayDetail.explanation }}</p>
                         <div class="growth-slot-viz">
                           <div class="growth-slot-viz-body">
-                            <div class="growth-slot-viz-rows">
-                              <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'row-' + s.slotIndex"
-                                   class="growth-slot-viz-row-block"
-                                   :class="{ 'growth-slot-viz-row-block--highlight': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                            <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'pair-' + s.slotIndex"
+                                 class="growth-slot-viz-pair"
+                                 :class="{ 'growth-slot-viz-pair--highlight': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                              <div class="growth-slot-viz-row-block">
                                 <span class="growth-slot-viz-row-name">{{ s.rowLabel }}</span>
                                 <span class="growth-slot-viz-row-range font-monospace small">
                                   bytes {{ s.rowByteStart }}–{{ s.rowByteEnd }}
                                 </span>
                               </div>
-                            </div>
-                            <div class="growth-slot-viz-connectors">
-                              <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'conn-' + s.slotIndex"
-                                   class="growth-slot-viz-connector"></div>
-                            </div>
-                            <div class="growth-slot-viz-slots">
-                              <div v-for="s in selectedRowLayout.pageDiagram.slotArrayDetail.slots" :key="'slot-' + s.slotIndex"
-                                   class="growth-slot-viz-slot-chip"
-                                   :class="{ 'growth-slot-viz-slot-chip--highlight': selectedRowLayout.pageDiagram.slotArrayDetail.slotCount === 1 }">
+                              <div class="growth-slot-viz-connector" aria-hidden="true"
+                                   :title="s.rowLabel + ' ← Slot ' + s.slotIndex"></div>
+                              <div class="growth-slot-viz-slot-chip">
                                 <span class="growth-slot-viz-slot-label">Slot {{ s.slotIndex }}</span>
                                 <span class="growth-slot-viz-slot-pos small text-muted">pág. {{ s.slotBytePosition }}–{{ s.slotByteEnd }}</span>
                                 <span class="growth-slot-viz-slot-val font-monospace">{{ s.offsetValue }} ({{ s.offsetHex }})</span>
@@ -515,6 +530,7 @@
                           </table>
                         </div>
                       </div>
+                    </div>
                     </div>
                   </div>
 

@@ -547,13 +547,108 @@
     };
   }
 
+  function buildRowStructureDetail(layout) {
+    var fields = [];
+    var offset = 0;
+    var vs = layout.variableSection;
+    var nVar = vs.entries ? vs.entries.length : 0;
+
+    RECORD_HEADER_FIELDS.forEach(function (f) {
+      fields.push({
+        id: 'rh-' + f.id,
+        label: f.label,
+        techName: f.label,
+        bytes: f.bytes,
+        offset: offset,
+        description: f.description,
+        cssClass: 'row-hdr'
+      });
+      offset += f.bytes;
+    });
+
+    if (layout.nullBitmap.bytes > 0) {
+      fields.push({
+        id: 'nullBitmap',
+        label: 'Null bitmap',
+        techName: 'null bitmap',
+        bytes: layout.nullBitmap.bytes,
+        offset: offset,
+        description: 'Um bit por coluna na linha (' + layout.nullBitmap.formula + ').',
+        cssClass: 'row-null'
+      });
+      offset += layout.nullBitmap.bytes;
+    }
+
+    if (layout.fixedData.total > 0) {
+      var fixedDesc = 'Colunas de tamanho fixo';
+      if (layout.fixedData.bitPackedBytes > 0) {
+        fixedDesc += ' e ' + layout.fixedData.bitColumns.length + ' coluna(s) bit empacotada(s) (' +
+          layout.fixedData.bitPackedBytes + ' B)';
+      }
+      fixedDesc += '.';
+      fields.push({
+        id: 'fixedData',
+        label: 'Dados fixos + bits',
+        techName: 'fixed-length data',
+        bytes: layout.fixedData.total,
+        offset: offset,
+        description: fixedDesc,
+        cssClass: 'row-fixed'
+      });
+      offset += layout.fixedData.total;
+    }
+
+    if (vs.total > 0) {
+      fields.push({
+        id: 'varCount',
+        label: 'Contador variáveis',
+        techName: 'variable column count',
+        bytes: vs.columnCountField || 2,
+        offset: offset,
+        description: 'Número de colunas de tamanho variável na linha.',
+        cssClass: 'row-var'
+      });
+      offset += vs.columnCountField || 2;
+
+      if (vs.offsetArrayBytes > 0) {
+        fields.push({
+          id: 'varOffsets',
+          label: 'Array de offsets',
+          techName: 'column offset array',
+          bytes: vs.offsetArrayBytes,
+          offset: offset,
+          description: '2 bytes × ' + nVar + ' coluna(s) variável(is).',
+          cssClass: 'row-var'
+        });
+        offset += vs.offsetArrayBytes;
+      }
+
+      if (vs.dataBytes > 0) {
+        fields.push({
+          id: 'varData',
+          label: 'Dados variáveis',
+          techName: 'variable-length data',
+          bytes: vs.dataBytes,
+          offset: offset,
+          description: 'Valores in-row, ponteiros LOB (16 B) ou overflow (24 B) conforme o modo.',
+          cssClass: 'row-var-data'
+        });
+        offset += vs.dataBytes;
+      }
+    }
+
+    return {
+      fields: fields,
+      total: layout.totalBytes,
+      note: 'Mapa byte a byte da linha de dados (ordem física simplificada).'
+    };
+  }
+
   function buildRowDiagram(layout) {
+    var rowStructureDetail = buildRowStructureDetail(layout);
     return {
       totalBytes: layout.totalBytes,
-      recordHeaderDetail: {
-        fields: RECORD_HEADER_FIELDS,
-        total: RECORD_HEADER_BYTES
-      },
+      rowStructureDetail: rowStructureDetail,
       segments: [
         { id: 'header', label: 'Record header', bytes: layout.header.total, cssClass: 'row-meta' },
         { id: 'null', label: 'Null bitmap', bytes: layout.nullBitmap.bytes, cssClass: 'row-meta' },
