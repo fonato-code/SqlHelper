@@ -97,6 +97,10 @@
           const valid = (S.DIAGRAM_COST_MODES || []).map((o) => o.id);
           return valid.includes(m) ? m : 'both';
         })(),
+        diagramCostScope: (function () {
+          const s = localStorage.getItem('sqlhelp-plan-cost-scope');
+          return s === 'perNode' ? 'perNode' : 'cumulative';
+        })(),
         diagramContextMenuOpen: false,
         diagramContextMenuX: 0,
         diagramContextMenuY: 0,
@@ -130,9 +134,18 @@
       diagramCostOptions() {
         return S.DIAGRAM_COST_MODES || [];
       },
+      diagramCostScopeOptions() {
+        return S.DIAGRAM_COST_SCOPES || [];
+      },
       diagramCostModeLabel() {
         const opt = (S.DIAGRAM_COST_MODES || []).find((o) => o.id === this.diagramCostMode);
-        return opt ? opt.label : 'I/O + CPU';
+        const scope = (S.DIAGRAM_COST_SCOPES || []).find((o) => o.id === this.diagramCostScope);
+        const modeLabel = opt ? opt.label : 'I/O + CPU';
+        const scopeShort = this.diagramCostScope === 'perNode' ? 'por nó' : 'cumulativo';
+        return modeLabel + ' · ' + scopeShort;
+      },
+      diagramCanvasKey() {
+        return this.diagramCostMode + '-' + this.diagramCostScope;
       }
     },
     watch: {
@@ -208,9 +221,25 @@
         if ((stmt.issues || []).some((i) => i.severity === 'danger')) return 'plan-row-issue';
         return '';
       },
+      applyDiagramCosts() {
+        const st = this.selectedStatement;
+        if (st && st.planRoot) {
+          S.applyDiagramCostMode(
+            st.planRoot,
+            this.diagramCostMode,
+            st.statementCost,
+            this.diagramCostScope
+          );
+        }
+      },
       updateDiagramLayout(st) {
         if (st && st.planRoot) {
-          S.applyDiagramCostMode(st.planRoot, this.diagramCostMode, st.statementCost);
+          S.applyDiagramCostMode(
+            st.planRoot,
+            this.diagramCostMode,
+            st.statementCost,
+            this.diagramCostScope
+          );
           this.diagramLayout = S.layoutPlanDiagram(st.planRoot);
         } else {
           this.diagramLayout = null;
@@ -232,11 +261,15 @@
         if (!valid.includes(mode)) return;
         this.diagramCostMode = mode;
         localStorage.setItem('sqlhelp-plan-cost-mode', mode);
-        const st = this.selectedStatement;
-        if (st && st.planRoot) {
-          S.applyDiagramCostMode(st.planRoot, mode, st.statementCost);
-        }
+        this.applyDiagramCosts();
         this.closeDiagramContextMenu();
+      },
+      setDiagramCostScope(scope) {
+        const valid = (S.DIAGRAM_COST_SCOPES || []).map((o) => o.id);
+        if (!valid.includes(scope)) return;
+        this.diagramCostScope = scope;
+        localStorage.setItem('sqlhelp-plan-cost-scope', scope);
+        this.applyDiagramCosts();
       },
       getDiagramViewportEl() {
         return this.$refs.diagramViewport;

@@ -135,8 +135,24 @@
   letter-spacing: 0.04em;
   color: var(--text-muted);
   padding: 0.35rem 0.75rem 0.25rem;
+  margin-bottom: 0.05rem;
+}
+
+.plan-context-menu-title:first-child {
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.15rem;
+}
+
+.plan-context-menu-title:not(:first-child) {
+  border-top: 1px solid var(--border);
+  margin-top: 0.2rem;
+  padding-top: 0.45rem;
+}
+
+.plan-context-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.25rem 0.5rem;
 }
 
 .plan-context-menu-item {

@@ -260,7 +260,7 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                    @mousedown="onDiagramPanStart"
                    @contextmenu.prevent="onDiagramContextMenu">
                 <div class="plan-diagram-stage" :style="diagramStageStyle">
-                  <plan-diagram-canvas :key="diagramCostMode" :layout="diagramLayout"></plan-diagram-canvas>
+                  <plan-diagram-canvas :key="diagramCanvasKey" :layout="diagramLayout"></plan-diagram-canvas>
                 </div>
               </div>
               <div v-if="diagramContextMenuOpen"
@@ -275,6 +275,17 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                         :title="opt.tooltip"
                         @click="setDiagramCostMode(opt.id)">
                   <i class="fal fa-check plan-context-check" v-if="diagramCostMode === opt.id"></i>
+                  <span class="plan-context-label">{{ opt.label }}</span>
+                </button>
+                <div class="plan-context-menu-divider"></div>
+                <div class="plan-context-menu-title">Exibição do custo</div>
+                <button v-for="opt in diagramCostScopeOptions" :key="opt.id"
+                        type="button"
+                        class="plan-context-menu-item"
+                        :class="{ active: diagramCostScope === opt.id }"
+                        :title="opt.tooltip"
+                        @click="setDiagramCostScope(opt.id)">
+                  <i class="fal fa-check plan-context-check" v-if="diagramCostScope === opt.id"></i>
                   <span class="plan-context-label">{{ opt.label }}</span>
                 </button>
               </div>

@@ -485,25 +485,57 @@
     }
   }
 
-  function applyDiagramCostMode(planRoot, mode, statementCost) {
+  function isIoMode(mode) {
+    return mode === 'io' || mode === 'io-sentry';
+  }
+
+  function isCpuMode(mode) {
+    return mode === 'cpu' || mode === 'cpu-sentry';
+  }
+
+  function localCostByMode(node, mode) {
+    if (isIoMode(mode)) return node.estimateIo || 0;
+    if (isCpuMode(mode)) return node.estimateCpu || 0;
+    return (node.estimateIo || 0) + (node.estimateCpu || 0);
+  }
+
+  function cumulativeCostByMode(node, mode) {
+    if (isIoMode(mode)) return subtreeIo(node);
+    if (isCpuMode(mode)) return subtreeCpu(node);
+    return node.subtreeCost || 0;
+  }
+
+  function denominatorByModeAndScope(planRoot, mode, statementCost, scope) {
+    const stmtTotal = statementCost || planRoot.subtreeCost || 0;
+    if (scope === 'perNode') return stmtTotal;
+    if (isIoMode(mode)) return subtreeIo(planRoot);
+    if (isCpuMode(mode)) return subtreeCpu(planRoot);
+    return planRoot.subtreeCost || 0;
+  }
+
+  function applyDiagramCostMode(planRoot, mode, statementCost, scope) {
     if (!planRoot) return;
     const m = mode || 'both';
-    const stmtTotal = statementCost || planRoot.subtreeCost || 0;
-    if (m === 'io') {
-      const total = subtreeIo(planRoot);
-      applyCostPercentWalk(planRoot, subtreeIo, total);
-    } else if (m === 'cpu') {
-      const total = subtreeCpu(planRoot);
-      applyCostPercentWalk(planRoot, subtreeCpu, total);
-    } else if (m === 'io-sentry') {
-      applyCostPercentWalk(planRoot, (n) => n.estimateIo || 0, stmtTotal);
-    } else if (m === 'cpu-sentry') {
-      applyCostPercentWalk(planRoot, (n) => n.estimateCpu || 0, stmtTotal);
-    } else {
-      const total = planRoot.subtreeCost || 0;
-      applyCostPercentWalk(planRoot, (n) => n.subtreeCost || 0, total);
-    }
+    const s = scope === 'perNode' ? 'perNode' : 'cumulative';
+    const total = denominatorByModeAndScope(planRoot, m, statementCost, s);
+    const getCost = s === 'perNode' ? (n) => localCostByMode(n, m) : (n) => cumulativeCostByMode(n, m);
+    applyCostPercentWalk(planRoot, getCost, total);
   }
+
+  const DIAGRAM_COST_SCOPES = [
+    {
+      id: 'cumulative',
+      label: 'Cumulativo (subárvore)',
+      tooltip:
+        'Percentual do custo acumulado na subárvore do operador (inclui filhos). Pais costumam mostrar % alto; equivalente a Show Cumulative Costs no Plan Explorer.'
+    },
+    {
+      id: 'perNode',
+      label: 'Por nó (operador)',
+      tooltip:
+        'Percentual só do custo local do operador (EstimateIO/CPU) ÷ StatementSubTreeCost. Equivalente a Show Per Node Costs no Plan Explorer.'
+    }
+  ];
 
   const DIAGRAM_COST_MODES = [
     {
@@ -542,5 +574,6 @@
   SqlHelp.highlightPlanSql = highlightSql;
   SqlHelp.applyDiagramCostMode = applyDiagramCostMode;
   SqlHelp.DIAGRAM_COST_MODES = DIAGRAM_COST_MODES;
+  SqlHelp.DIAGRAM_COST_SCOPES = DIAGRAM_COST_SCOPES;
   SqlHelp.PLAN_SAMPLE_PATH = 'samples/Plano de execução.xml';
 })(typeof window !== 'undefined' ? window : this);
