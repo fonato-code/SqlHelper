@@ -101,11 +101,75 @@
   border: 1px solid var(--border);
   border-radius: 0.375rem;
   background: var(--bg-table-head);
-  min-height: 280px;
-  max-height: 520px;
+  min-height: 360px;
+  max-height: 560px;
   position: relative;
-  cursor: default;
+  cursor: grab;
   touch-action: none;
+}
+
+.plan-diagram-viewport.plan-diagram-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.plan-diagram-viewport .plan-diagram-stage {
+  pointer-events: none;
+}
+
+.plan-diagram-context-menu {
+  position: fixed;
+  z-index: 1100;
+  min-width: 200px;
+  padding: 0.35rem 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.plan-context-menu-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0.35rem 0.75rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.15rem;
+}
+
+.plan-context-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  cursor: help;
+}
+
+.plan-context-menu-item:hover,
+.plan-context-menu-item.active {
+  background: rgba(13, 110, 253, 0.12);
+}
+
+.plan-context-check {
+  width: 1rem;
+  margin-right: 0.35rem;
+  font-size: 0.75rem;
+  color: #0d6efd;
+}
+
+.plan-context-menu-item:not(.active) .plan-context-check {
+  visibility: hidden;
+}
+
+.plan-context-label {
+  flex: 1;
 }
 
 .plan-diagram-stage {
@@ -117,7 +181,7 @@
 
 .plan-diagram-svg {
   display: block;
-  min-width: 200px;
+  overflow: visible;
 }
 
 /* Edges */
@@ -140,24 +204,24 @@
 }
 
 .plan-node-cost-badge {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   fill: #0d6efd;
 }
 
 .plan-node-op-text {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   fill: var(--text-main);
 }
 
 .plan-node-table-text {
-  font-size: 9px;
+  font-size: 10px;
   fill: var(--text-muted);
 }
 
 .plan-node-rows-text {
-  font-size: 8px;
+  font-size: 9px;
   fill: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -199,6 +263,18 @@
   font-size: 0.78rem;
   max-height: 420px;
   overflow: auto;
+}
+
+.plan-alerts-list {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+}
+
+.plan-alerts-list .list-group-item {
+  background: var(--bg-card);
+  border-color: var(--border);
 }
 
 .plan-tree-item {

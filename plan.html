@@ -122,22 +122,6 @@
           </div>
         </section>
 
-        <section class="card shadow-sm mb-4" v-if="planResult.allIssues.length">
-          <div class="card-header">
-            <i class="fal fa-exclamation-triangle text-warning me-1"></i>
-            <strong>Problemas detectados</strong>
-            <span class="badge bg-secondary ms-2">{{ planResult.allIssues.length }}</span>
-          </div>
-          <ul class="list-group list-group-flush">
-            <li v-for="(issue, idx) in planResult.allIssues" :key="idx"
-                class="list-group-item list-group-item-action small py-2"
-                @click="selectedStatementId = issue.statementId">
-              <i class="fal me-2" :class="issueIcon(issue.severity)"></i>
-              <span class="text-muted">Stmt {{ issue.statementId }}:</span> {{ issue.message }}
-            </li>
-          </ul>
-        </section>
-
         <section class="card shadow-sm mb-4">
           <div class="card-header">
             <i class="fal fa-list me-1"></i>
@@ -233,6 +217,13 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                   Table I/O
                 </button>
               </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'alerts' }" @click="planTab = 'alerts'">
+                  Alerta
+                  <span v-if="selectedStatement.issues.length"
+                        class="badge bg-warning text-dark ms-1">{{ selectedStatement.issues.length }}</span>
+                </button>
+              </li>
             </ul>
 
             <div v-show="planTab === 'diagram'"
@@ -257,14 +248,35 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                   <i class="fal" :class="diagramFullscreen ? 'fa-compress' : 'fa-expand'"></i>
                   <span class="ms-1 d-none d-sm-inline">{{ diagramFullscreen ? 'Sair' : 'Tela cheia' }}</span>
                 </button>
-                <span class="small text-muted ms-auto d-none d-md-inline">Scroll = zoom · Esc = sair</span>
+                <span class="small text-muted ms-auto">
+                  <span class="d-none d-md-inline">Scroll = zoom · Arrastar = mover · Botão direito = opções ·</span>
+                  Custo: <strong>{{ diagramCostModeLabel }}</strong>
+                </span>
               </div>
               <div ref="diagramViewport"
                    class="plan-diagram-viewport"
-                   @wheel="onDiagramWheel">
+                   :class="{ 'plan-diagram-panning': diagramPanDragging }"
+                   @wheel="onDiagramWheel"
+                   @mousedown="onDiagramPanStart"
+                   @contextmenu.prevent="onDiagramContextMenu">
                 <div class="plan-diagram-stage" :style="diagramStageStyle">
-                  <plan-diagram-canvas :layout="diagramLayout"></plan-diagram-canvas>
+                  <plan-diagram-canvas :key="diagramCostMode" :layout="diagramLayout"></plan-diagram-canvas>
                 </div>
+              </div>
+              <div v-if="diagramContextMenuOpen"
+                   class="plan-diagram-context-menu"
+                   :style="{ left: diagramContextMenuX + 'px', top: diagramContextMenuY + 'px' }"
+                   @click.stop>
+                <div class="plan-context-menu-title">Custo por</div>
+                <button v-for="opt in diagramCostOptions" :key="opt.id"
+                        type="button"
+                        class="plan-context-menu-item"
+                        :class="{ active: diagramCostMode === opt.id }"
+                        :title="opt.tooltip"
+                        @click="setDiagramCostMode(opt.id)">
+                  <i class="fal fa-check plan-context-check" v-if="diagramCostMode === opt.id"></i>
+                  <span class="plan-context-label">{{ opt.label }}</span>
+                </button>
               </div>
             </div>
 
@@ -338,6 +350,19 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <div v-show="planTab === 'alerts'" class="plan-alerts-list">
+              <ul v-if="selectedStatement.issues.length" class="list-group list-group-flush">
+                <li v-for="(issue, idx) in selectedStatement.issues" :key="idx"
+                    class="list-group-item small py-2">
+                  <i class="fal me-2" :class="issueIcon(issue.severity)"></i>
+                  {{ issue.message }}
+                </li>
+              </ul>
+              <p v-else class="text-muted small mb-0 py-3 text-center">
+                <i class="fal fa-check-circle me-1"></i> Nenhum alerta para este statement.
+              </p>
             </div>
           </div>
         </section>

@@ -2,10 +2,10 @@
   'use strict';
   var SqlHelp = global.SqlHelp = global.SqlHelp || {};
 
-  const NODE_W = 168;
-  const NODE_H = 72;
-  const H_GAP = 56;
-  const V_GAP = 14;
+  const NODE_W = 200;
+  const NODE_H = 88;
+  const H_GAP = 64;
+  const V_GAP = 18;
   const PADDING = 24;
 
   function rowCountForEdge(childNode) {

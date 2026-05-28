@@ -161,6 +161,8 @@
       actualRowsRead,
       estimateRowsRead: estRowsRead,
       subtreeCost,
+      estimateCpu: attrNum(relOpEl, 'EstimateCPU') || 0,
+      estimateIo: attrNum(relOpEl, 'EstimateIO') || 0,
       costPercent:
         statementCost > 0 ? Math.round((subtreeCost / statementCost) * 1000) / 10 : 0,
       parallel,
@@ -459,7 +461,86 @@
     return escaped.replace(keywords, '<span class="sql-kw">$1</span>');
   }
 
+  function subtreeCpu(node) {
+    let cpu = node.estimateCpu || 0;
+    for (const ch of node.children || []) {
+      cpu += subtreeCpu(ch);
+    }
+    return cpu;
+  }
+
+  function subtreeIo(node) {
+    let io = node.estimateIo || 0;
+    for (const ch of node.children || []) {
+      io += subtreeIo(ch);
+    }
+    return io;
+  }
+
+  function applyCostPercentWalk(node, getNodeCost, total) {
+    const cost = getNodeCost(node);
+    node.costPercent = total > 0 ? Math.round((cost / total) * 1000) / 10 : 0;
+    for (const ch of node.children || []) {
+      applyCostPercentWalk(ch, getNodeCost, total);
+    }
+  }
+
+  function applyDiagramCostMode(planRoot, mode, statementCost) {
+    if (!planRoot) return;
+    const m = mode || 'both';
+    const stmtTotal = statementCost || planRoot.subtreeCost || 0;
+    if (m === 'io') {
+      const total = subtreeIo(planRoot);
+      applyCostPercentWalk(planRoot, subtreeIo, total);
+    } else if (m === 'cpu') {
+      const total = subtreeCpu(planRoot);
+      applyCostPercentWalk(planRoot, subtreeCpu, total);
+    } else if (m === 'io-sentry') {
+      applyCostPercentWalk(planRoot, (n) => n.estimateIo || 0, stmtTotal);
+    } else if (m === 'cpu-sentry') {
+      applyCostPercentWalk(planRoot, (n) => n.estimateCpu || 0, stmtTotal);
+    } else {
+      const total = planRoot.subtreeCost || 0;
+      applyCostPercentWalk(planRoot, (n) => n.subtreeCost || 0, total);
+    }
+  }
+
+  const DIAGRAM_COST_MODES = [
+    {
+      id: 'both',
+      label: 'I/O + CPU',
+      tooltip:
+        'Custo total da subárvore (EstimatedTotalSubtreeCost) ÷ custo total do statement. Equivale ao padrão do SSMS e Plan Explorer.'
+    },
+    {
+      id: 'io',
+      label: 'I/O',
+      tooltip:
+        'Custo de I/O cumulativo da subárvore do operador ÷ soma total de I/O do plano. Destaca ramos com mais leitura física/lógica.'
+    },
+    {
+      id: 'cpu',
+      label: 'CPU',
+      tooltip:
+        'Custo de CPU cumulativo da subárvore do operador ÷ soma total de CPU do plano. Destaca operadores mais pesados em processamento.'
+    },
+    {
+      id: 'io-sentry',
+      label: 'I/O (Sentry)',
+      tooltip:
+        'EstimateIO local do operador ÷ StatementSubTreeCost do statement. Mesma regra do Plan Explorer em Costs By → I/O.'
+    },
+    {
+      id: 'cpu-sentry',
+      label: 'CPU (Sentry)',
+      tooltip:
+        'EstimateCPU local do operador ÷ StatementSubTreeCost do statement. Mesma regra do Plan Explorer em Costs By → CPU.'
+    }
+  ];
+
   SqlHelp.parseShowPlanXml = parseShowPlanXml;
   SqlHelp.highlightPlanSql = highlightSql;
+  SqlHelp.applyDiagramCostMode = applyDiagramCostMode;
+  SqlHelp.DIAGRAM_COST_MODES = DIAGRAM_COST_MODES;
   SqlHelp.PLAN_SAMPLE_PATH = 'samples/Plano de execução.xml';
 })(typeof window !== 'undefined' ? window : this);
