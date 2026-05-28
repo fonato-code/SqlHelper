@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="src/js/sqlhelp-theme.js"></script>
+  <link href="src/css/bootsrtap-v5.3.8.css" rel="stylesheet">
+  <link href="src/fontawesome5pro/fontawesome-pro-5.8.2.css" rel="stylesheet">
+  <link href="src/css/sqlhelp-common.css" rel="stylesheet">
+  <link href="src/css/sqlhelp-plan.css" rel="stylesheet">
+  <title>SqlHelp — Plano de execução</title>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header class="app-header py-3 mb-4 shadow-sm">
+      <div class="container-fluid px-4">
+        <div class="d-flex align-items-center gap-3 w-100 flex-wrap">
+          <i class="fal fa-project-diagram fa-2x"></i>
+          <div class="flex-grow-1 min-width-0">
+            <h1 class="h4 mb-0">SqlHelp — Plano de execução</h1>
+            <p class="mb-0 small opacity-75">Análise de planos XML do SQL Server (ShowPlanXML)</p>
+          </div>
+          <nav class="sqlhelp-nav me-2">
+            <ul class="nav nav-pills gap-1 mb-0 flex-wrap justify-content-end">
+              <li class="nav-item"><a href="index.html" class="nav-link"><i class="fal fa-table me-1"></i>sp_help</a></li>
+              <li class="nav-item"><a href="stats.html" class="nav-link"><i class="fal fa-tachometer-alt me-1"></i>IO / Time</a></li>
+              <li class="nav-item"><a href="plan.html" class="nav-link active"><i class="fal fa-project-diagram me-1"></i>Plano</a></li>
+              <li class="nav-item"><a href="queries.html" class="nav-link"><i class="fal fa-book me-1"></i>Queries</a></li>
+              <li class="nav-item"><a href="compare.html" class="nav-link"><i class="fal fa-columns me-1"></i>Comparar TSV</a></li>
+              <li class="nav-item"><a href="growth.html" class="nav-link"><i class="fal fa-chart-line me-1"></i>Crescimento DB</a></li>
+            </ul>
+          </nav>
+          <button type="button" class="btn btn-sm theme-toggle-btn"
+                  @click="toggleTheme"
+                  :title="theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'">
+            <i class="fal" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+            <span class="ms-1 d-none d-sm-inline">{{ theme === 'dark' ? 'Claro' : 'Escuro' }}</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container-fluid px-4 pb-5">
+      <section class="card shadow-sm mb-4">
+        <div class="card-header d-flex align-items-center gap-2">
+          <i class="fal fa-file-import section-icon text-primary"></i>
+          <strong>Importar plano de execução</strong>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            No SSMS: clique com o botão direito no plano gráfico → <strong>Salvar Plano de Execução Como...</strong>
+            (<code>.sqlplan</code>) ou exiba o plano em XML e salve/cole aqui.
+            Planos com estatísticas reais (actual execution plan) permitem comparar linhas estimadas vs. reais.
+          </p>
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <label class="btn btn-primary mb-0">
+              <i class="fal fa-folder-open me-1"></i> Importar arquivo
+              <input type="file" class="d-none" accept=".sqlplan,.xml,text/xml,application/xml" @change="onFileChange">
+            </label>
+            <button type="button" class="btn btn-primary" @click="parsePlanInput" :disabled="!planRawXml.trim()">
+              <i class="fal fa-search me-1"></i> Analisar XML
+            </button>
+            <button type="button" class="btn btn-outline-secondary" @click="loadPlanSample">
+              <i class="fal fa-file-code me-1"></i> Carregar exemplo
+            </button>
+            <button v-if="planParsed" type="button" class="btn btn-outline-secondary" @click="resetPlan">
+              <i class="fal fa-times me-1"></i> Limpar
+            </button>
+          </div>
+          <p v-if="fileName" class="small text-muted mb-2"><i class="fal fa-file me-1"></i>{{ fileName }}</p>
+          <textarea
+            class="form-control plan-paste-area"
+            v-model="planRawXml"
+            placeholder="Cole o XML ShowPlanXML aqui ou importe um arquivo .sqlplan / .xml..."
+            spellcheck="false"
+          ></textarea>
+          <div v-if="planParseError" class="alert alert-danger mt-3 mb-0">
+            <i class="fal fa-exclamation-triangle me-1"></i> {{ planParseError }}
+          </div>
+        </div>
+      </section>
+
+      <template v-if="planParsed && planResult">
+        <section class="row g-3 mb-4">
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="plan-kpi">
+              <div class="plan-kpi-label">Statements</div>
+              <div class="plan-kpi-value">{{ planResult.statementCount }}</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="plan-kpi">
+              <div class="plan-kpi-label">Custo total</div>
+              <div class="plan-kpi-value">{{ formatCost(planResult.totalCost) }}</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="plan-kpi">
+              <div class="plan-kpi-label">Tempo total</div>
+              <div class="plan-kpi-value">{{ planResult.totalElapsedMs }} ms</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="plan-kpi">
+              <div class="plan-kpi-label">CPU total</div>
+              <div class="plan-kpi-value">{{ planResult.totalCpuMs }} ms</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="plan-kpi">
+              <div class="plan-kpi-label">Logical reads</div>
+              <div class="plan-kpi-value">{{ formatInt(planResult.totalLogicalReads) }}</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="plan-kpi">
+              <div class="plan-kpi-label">Alertas</div>
+              <div class="plan-kpi-value" :class="planResult.dangerCount ? 'text-danger' : ''">
+                {{ planResult.issueCount }}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card shadow-sm mb-4" v-if="planResult.allIssues.length">
+          <div class="card-header">
+            <i class="fal fa-exclamation-triangle text-warning me-1"></i>
+            <strong>Problemas detectados</strong>
+            <span class="badge bg-secondary ms-2">{{ planResult.allIssues.length }}</span>
+          </div>
+          <ul class="list-group list-group-flush">
+            <li v-for="(issue, idx) in planResult.allIssues" :key="idx"
+                class="list-group-item list-group-item-action small py-2"
+                @click="selectedStatementId = issue.statementId">
+              <i class="fal me-2" :class="issueIcon(issue.severity)"></i>
+              <span class="text-muted">Stmt {{ issue.statementId }}:</span> {{ issue.message }}
+            </li>
+          </ul>
+        </section>
+
+        <section class="card shadow-sm mb-4">
+          <div class="card-header">
+            <i class="fal fa-list me-1"></i>
+            <strong>Resumo por statement</strong>
+            <span class="text-muted small ms-2">Build {{ planResult.build }} · CE v{{ planResult.statements[0]?.cardinalityModel || '—' }}</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 plan-stmt-table">
+              <thead class="table-light">
+                <tr>
+                  <th>#</th>
+                  <th>Statement</th>
+                  <th class="text-end">Custo %</th>
+                  <th class="text-end">Compile</th>
+                  <th class="text-end">Elapsed</th>
+                  <th class="text-end">CPU</th>
+                  <th class="text-end">Reads</th>
+                  <th class="text-end">Est. rows</th>
+                  <th class="text-end">Actual rows</th>
+                  <th class="text-end">Alertas</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="stmt in planResult.statements" :key="stmt.statementId"
+                    :class="[rowClass(stmt), { 'plan-stmt-selected': selectedStatementId === stmt.statementId }]"
+                    @click="selectStatement(stmt)">
+                  <td>{{ stmt.statementId }}</td>
+                  <td class="text-truncate" style="max-width: 320px" :title="stmt.statementText">{{ stmt.statementPreview }}…</td>
+                  <td class="text-end">{{ formatPct(stmt.costPercent) }}</td>
+                  <td class="text-end">{{ stmt.compileTime != null ? stmt.compileTime + ' ms' : '—' }}</td>
+                  <td class="text-end">{{ stmt.elapsedTime != null ? stmt.elapsedTime + ' ms' : '—' }}</td>
+                  <td class="text-end">{{ stmt.cpuTime != null ? stmt.cpuTime + ' ms' : '—' }}</td>
+                  <td class="text-end">{{ formatInt(stmt.totalLogicalReads) }}</td>
+                  <td class="text-end">{{ formatInt(stmt.statementEstRows) }}</td>
+                  <td class="text-end" :class="stmt.rowMismatch ? 'text-danger fw-semibold' : ''">
+                    {{ stmt.actualRows != null ? formatInt(stmt.actualRows) : '—' }}
+                  </td>
+                  <td class="text-end">
+                    <span v-if="stmt.issues.length" class="badge bg-warning text-dark">{{ stmt.issues.length }}</span>
+                    <span v-else class="text-muted">0</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card shadow-sm mb-4" v-if="selectedStatement">
+          <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <strong>Statement {{ selectedStatement.statementId }}</strong>
+            <span class="badge bg-secondary">{{ selectedStatement.statementType }}</span>
+            <span class="badge bg-outline-secondary border">{{ selectedStatement.optmLevel }}</span>
+            <span class="ms-auto small text-muted">
+              Custo {{ formatCost(selectedStatement.statementCost) }} · Hash {{ selectedStatement.queryHash }}
+            </span>
+          </div>
+          <div class="card-body">
+            <pre class="plan-sql-view mb-3" v-html="highlightedSql"></pre>
+
+            <div v-if="selectedStatement.missingIndexes.length" class="mb-3">
+              <h6 class="text-muted"><i class="fal fa-database me-1"></i> Índices sugeridos</h6>
+              <div v-for="(mi, i) in selectedStatement.missingIndexes" :key="i" class="mb-2">
+                <div class="small">
+                  <strong>{{ mi.database }}.{{ mi.schema }}.{{ mi.table }}</strong>
+                  — impacto {{ mi.impact != null ? mi.impact.toFixed(2) : '?' }}%
+                </div>
+                <div class="plan-missing-ddl text-muted">
+CREATE NONCLUSTERED INDEX IX_{{ mi.table }}_Missing
+ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.inequality).join(', ') }})
+{{ mi.columns.include.length ? 'INCLUDE (' + mi.columns.include.join(', ') + ')' : '' }};
+                </div>
+              </div>
+            </div>
+
+            <ul class="nav nav-tabs mb-3">
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'diagram' }" @click="planTab = 'diagram'">
+                  Diagrama
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'tree' }" @click="planTab = 'tree'">
+                  Árvore
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'top' }" @click="planTab = 'top'">
+                  Top operações
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'io' }" @click="planTab = 'io'">
+                  Table I/O
+                </button>
+              </li>
+            </ul>
+
+            <div v-show="planTab === 'diagram'"
+                 ref="diagramShell"
+                 class="plan-diagram-shell"
+                 :class="{ 'plan-diagram-fullscreen': diagramFullscreen }">
+              <div class="plan-diagram-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="zoomOut" title="Reduzir">
+                  <i class="fal fa-search-minus"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="zoomReset" title="100%">
+                  {{ diagramZoomPct }}%
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="zoomIn" title="Ampliar">
+                  <i class="fal fa-search-plus"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="diagramFitToView" title="Ajustar ao painel">
+                  <i class="fal fa-compress-arrows-alt me-1"></i>Ajustar
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleDiagramFullscreen"
+                        :title="diagramFullscreen ? 'Sair da tela cheia' : 'Tela cheia'">
+                  <i class="fal" :class="diagramFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+                  <span class="ms-1 d-none d-sm-inline">{{ diagramFullscreen ? 'Sair' : 'Tela cheia' }}</span>
+                </button>
+                <span class="small text-muted ms-auto d-none d-md-inline">Scroll = zoom · Esc = sair</span>
+              </div>
+              <div ref="diagramViewport"
+                   class="plan-diagram-viewport"
+                   @wheel="onDiagramWheel">
+                <div class="plan-diagram-stage" :style="diagramStageStyle">
+                  <plan-diagram-canvas :layout="diagramLayout"></plan-diagram-canvas>
+                </div>
+              </div>
+            </div>
+
+            <div v-show="planTab === 'tree'" class="plan-tree-list">
+              <div v-for="op in selectedStatement.flatOps" :key="op.nodeId"
+                   class="plan-tree-item"
+                   :class="{ 'plan-tree-hot': (op.costPercent || 0) >= 20 }"
+                   :style="{ paddingLeft: (Number(op.nodeId) * 12 + 8) + 'px' }">
+                <span class="text-muted">[{{ op.nodeId }}]</span>
+                <strong>{{ op.physicalOp }}</strong>
+                <span v-if="op.objectRef?.table"> — {{ op.objectRef.table }}</span>
+                <span class="text-primary"> · {{ formatPct(op.costPercent) }}</span>
+                <span class="text-muted"> · est {{ formatInt(op.estimateRows) }}</span>
+                <span v-if="op.actualRows != null" :class="op.rowMismatch ? 'text-danger' : 'text-muted'">
+                  · actual {{ formatInt(op.actualRows) }}
+                </span>
+              </div>
+            </div>
+
+            <div v-show="planTab === 'top'" class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr>
+                    <th>Nó</th>
+                    <th>Operação</th>
+                    <th>Objeto</th>
+                    <th class="text-end">Custo %</th>
+                    <th class="text-end">Est. rows</th>
+                    <th class="text-end">Actual</th>
+                    <th class="text-end">Reads</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="op in selectedStatement.topOps" :key="'top-' + op.nodeId"
+                      :class="op.rowMismatch === 'high' ? 'plan-row-mismatch-high' : ''">
+                    <td>{{ op.nodeId }}</td>
+                    <td>{{ op.physicalOp }}</td>
+                    <td class="small">{{ op.objectRef ? op.objectRef.table + (op.objectRef.index ? ' · ' + op.objectRef.index : '') : '—' }}</td>
+                    <td class="text-end">{{ formatPct(op.costPercent) }}</td>
+                    <td class="text-end">{{ formatInt(op.estimateRows) }}</td>
+                    <td class="text-end">{{ op.actualRows != null ? formatInt(op.actualRows) : '—' }}</td>
+                    <td class="text-end">{{ op.actualLogicalReads != null ? formatInt(op.actualLogicalReads) : '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-show="planTab === 'io'" class="table-responsive">
+              <table class="table table-sm table-striped mb-0">
+                <thead>
+                  <tr>
+                    <th>Tabela</th>
+                    <th>Índice</th>
+                    <th>Operações</th>
+                    <th class="text-end">Logical reads</th>
+                    <th class="text-end">Physical</th>
+                    <th class="text-end">Rows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, i) in selectedStatement.tableIo" :key="i">
+                    <td>{{ row.table }}</td>
+                    <td class="small">{{ row.index }}</td>
+                    <td class="small">{{ row.ops }}</td>
+                    <td class="text-end">{{ formatInt(row.logicalReads) }}</td>
+                    <td class="text-end">{{ formatInt(row.physicalReads) }}</td>
+                    <td class="text-end">{{ formatInt(row.actualRows) }}</td>
+                  </tr>
+                  <tr v-if="!selectedStatement.tableIo.length">
+                    <td colspan="6" class="text-muted text-center">Sem dados de I/O (plano estimado ou sem runtime stats).</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </template>
+    </main>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div class="toast align-items-center text-bg-success border-0" ref="toastEl" role="alert">
+        <div class="d-flex">
+          <div class="toast-body">
+            <i class="fal fa-check me-1"></i> {{ toastMessage }}
+          </div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/js/vue.js"></script>
+  <script src="src/js/bootstrap-v5.3.8.js"></script>
+  <script src="src/js/sqlhelp-ui.js"></script>
+  <script src="src/js/sqlhelp-plan-parser.js"></script>
+  <script src="src/js/sqlhelp-plan-diagram.js"></script>
+  <script src="src/js/plan-app.js"></script>
+</body>
+</html>

@@ -20,6 +20,11 @@
         const n = Number(ms) || 0;
         return n + ' ms';
       },
+      formatInt(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return '—';
+        return v.toLocaleString('pt-BR');
+      },
       barPercent(value, max) {
         const v = Number(value) || 0;
         const m = Number(max) || 1;
