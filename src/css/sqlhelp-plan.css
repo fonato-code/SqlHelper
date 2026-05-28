@@ -236,6 +236,11 @@
   fill: var(--text-muted);
 }
 
+.plan-node-index-text {
+  font-size: 9px;
+  fill: var(--text-muted);
+}
+
 .plan-node-rows-text {
   font-size: 9px;
   fill: var(--text-muted);

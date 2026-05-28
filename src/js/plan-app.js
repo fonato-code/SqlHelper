@@ -21,9 +21,9 @@
            :height="layout.height"
            :viewBox="'0 0 ' + layout.width + ' ' + layout.height">
         <defs>
-          <marker id="plan-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4"
-                  orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L8,4 L0,8 z" class="plan-arrow-head"/>
+          <marker id="plan-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3"
+                  orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L5,3 L0,6 z" class="plan-arrow-head"/>
           </marker>
         </defs>
         <g class="plan-edges">
@@ -46,10 +46,17 @@
               {{ truncate(n.data.physicalOp, 24) }}
             </text>
             <text v-if="n.data.objectRef && n.data.objectRef.table"
-                  class="plan-node-table-text" :x="n.w/2" y="52" text-anchor="middle">
-              {{ truncate(n.data.objectRef.table, 22) }}
+                  class="plan-node-table-text" :x="n.w/2"
+                  :y="n.data.objectRef.index ? 50 : 52" text-anchor="middle">
+              {{ truncate(planUi.formatPlanObjectTable(n.data.objectRef), 26) }}
             </text>
-            <text class="plan-node-rows-text" :x="n.w/2" y="78" text-anchor="middle">
+            <text v-if="n.data.objectRef && n.data.objectRef.index"
+                  class="plan-node-index-text" :x="n.w/2" y="63" text-anchor="middle">
+              {{ truncate(planUi.formatPlanObjectIndex(n.data.objectRef), 26) }}
+            </text>
+            <text class="plan-node-rows-text" :x="n.w/2"
+                  :y="n.data.objectRef && n.data.objectRef.index ? 80 : (n.data.objectRef && n.data.objectRef.table ? 68 : 78)"
+                  text-anchor="middle">
               est {{ planUi.formatPlanRows(n.data.estimateRows) }}
               <tspan v-if="n.data.actualRows != null"> · act {{ planUi.formatPlanRows(n.data.actualRows) }}</tspan>
             </text>
@@ -74,6 +81,8 @@
           formatPct: (n) => this.formatPct(n),
           formatInt: (n) => this.formatInt(n),
           formatPlanRows: (n) => this.formatPlanRows(n),
+          formatPlanObjectTable: (obj) => S.formatPlanObjectTable(obj),
+          formatPlanObjectIndex: (obj) => S.formatPlanObjectIndex(obj),
           nodeVisualClass: (node) => S.planNodeVisualClass(node)
         }
       };

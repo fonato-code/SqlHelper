@@ -3,7 +3,8 @@
   var SqlHelp = global.SqlHelp = global.SqlHelp || {};
 
   const NODE_W = 200;
-  const NODE_H = 88;
+  const NODE_H = 100;
+  const ARROW_INSET = 6;
   const H_GAP = 64;
   const V_GAP = 18;
   const PADDING = 24;
@@ -18,11 +19,11 @@
 
   function edgeStrokeWidth(rowCount) {
     const r = Math.max(1, Number(rowCount) || 1);
-    if (r >= 100000) return 8;
-    if (r >= 10000) return 6;
-    if (r >= 1000) return 5;
-    if (r >= 100) return 4;
-    if (r >= 10) return 3;
+    if (r >= 100000) return 6;
+    if (r >= 10000) return 5;
+    if (r >= 1000) return 4;
+    if (r >= 100) return 3;
+    if (r >= 10) return 2.5;
     return 2;
   }
 
@@ -30,7 +31,7 @@
   function buildEdgePath(from, to) {
     const x1 = from.x;
     const y1 = from.y + from.h / 2;
-    const x2 = to.x + to.w;
+    const x2 = to.x + to.w - ARROW_INSET;
     const y2 = to.y + to.h / 2;
     const midX = (x1 + x2) / 2;
     return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;

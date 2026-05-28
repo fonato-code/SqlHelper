@@ -185,14 +185,26 @@
     return node;
   }
 
+  function formatPlanObjectTable(obj) {
+    if (!obj || !obj.table) return '';
+    if (obj.schema) return '[' + obj.schema + '].[' + obj.table + ']';
+    return obj.table;
+  }
+
+  function formatPlanObjectIndex(obj) {
+    if (!obj || !obj.index) return '';
+    return '[' + obj.index + ']';
+  }
+
   function buildNodeLabel(physicalOp, logicalOp, obj) {
     const parts = [physicalOp || logicalOp];
     if (obj && obj.table) {
-      let t = obj.table;
+      let t = formatPlanObjectTable(obj);
       if (obj.alias && obj.alias !== obj.table) t += ' AS ' + obj.alias;
       parts.push(t);
     }
-    if (obj && obj.index) parts.push('(' + obj.index + ')');
+    const idx = formatPlanObjectIndex(obj);
+    if (idx) parts.push(idx);
     return parts.join('\n');
   }
 
@@ -572,6 +584,8 @@
 
   SqlHelp.parseShowPlanXml = parseShowPlanXml;
   SqlHelp.highlightPlanSql = highlightSql;
+  SqlHelp.formatPlanObjectTable = formatPlanObjectTable;
+  SqlHelp.formatPlanObjectIndex = formatPlanObjectIndex;
   SqlHelp.applyDiagramCostMode = applyDiagramCostMode;
   SqlHelp.DIAGRAM_COST_MODES = DIAGRAM_COST_MODES;
   SqlHelp.DIAGRAM_COST_SCOPES = DIAGRAM_COST_SCOPES;
