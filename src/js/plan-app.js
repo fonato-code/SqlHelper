@@ -1,4 +1,4 @@
-/* global Vue, SqlHelp */
+/* global Vue, SqlHelp, bootstrap */
 (function () {
   'use strict';
   const { createApp } = Vue;
@@ -7,6 +7,7 @@
   const ZOOM_MIN = 0.05;
   const ZOOM_MAX = 8;
   const ZOOM_STEP = 0.12;
+  const PAN_DRAG_THRESHOLD = 5;
 
   const PlanDiagramCanvas = {
     name: 'PlanDiagramCanvas',
@@ -36,9 +37,21 @@
         </g>
         <g class="plan-nodes">
           <g v-for="n in layout.nodes" :key="n.id"
+             class="plan-node-group"
              :transform="'translate(' + n.x + ',' + n.y + ')'"
-             :class="planUi.nodeVisualClass(n.data)">
+             :class="planUi.nodeVisualClass(n.data)"
+             :data-node-id="n.id"
+             title="Duplo clique para ver detalhes">
             <rect class="plan-node-rect" :width="n.w" :height="n.h" rx="4"/>
+            <g v-if="planUi.nodeAlertCount(n.data) > 0"
+               class="plan-node-alert-badge"
+               :transform="'translate(' + (n.w - 20) + ', 2)'"
+               :title="planUi.nodeAlertCount(n.data) + ' alerta(s)'">
+              <path d="M0,14 L7,0 L14,14 Z" class="plan-node-alert-triangle"/>
+              <text x="7" y="12" text-anchor="middle" class="plan-node-alert-count">
+                {{ planUi.nodeAlertCount(n.data) > 9 ? '9+' : planUi.nodeAlertCount(n.data) }}
+              </text>
+            </g>
             <text class="plan-node-cost-badge" :x="n.w/2" y="16" text-anchor="middle">
               {{ planUi.formatPct(n.data.costPercent) }}
             </text>
@@ -83,7 +96,12 @@
           formatPlanRows: (n) => this.formatPlanRows(n),
           formatPlanObjectTable: (obj) => S.formatPlanObjectTable(obj),
           formatPlanObjectIndex: (obj) => S.formatPlanObjectIndex(obj),
-          nodeVisualClass: (node) => S.planNodeVisualClass(node)
+          nodeVisualClass: (node) => S.planNodeVisualClass(node),
+          nodeAlertCount: (node) => {
+            const st = this.selectedStatement;
+            return S.getNodeAlertCount(node, st ? st.issues : []);
+          },
+          onNodeDblClick: (node) => this.openPlanNodeModal(node)
         }
       };
     },
@@ -114,7 +132,9 @@
         diagramContextMenuX: 0,
         diagramContextMenuY: 0,
         fileName: '',
-        toastMessage: ''
+        toastMessage: '',
+        planNodeDetail: null,
+        planNodeModalInstance: null
       };
     },
     computed: {
@@ -224,6 +244,9 @@
         if (!Number.isFinite(v)) return '—';
         return v.toFixed(1) + '%';
       },
+      formatPlanExprHtml(content) {
+        return S.formatPlanExprHtml(content);
+      },
       rowClass(stmt) {
         if (stmt.rowMismatch === 'high') return 'plan-row-mismatch-high';
         if (stmt.rowMismatch === 'medium') return 'plan-row-mismatch-med';
@@ -293,24 +316,44 @@
         if (ev.button !== 0) return;
         const vp = this.getDiagramViewportEl();
         if (!vp || !ev.target.closest('.plan-diagram-viewport')) return;
-        ev.preventDefault();
-        this.diagramPanDragging = true;
         this._diagramDrag = {
           clientX: ev.clientX,
           clientY: ev.clientY,
           panX: this.diagramPan.x,
-          panY: this.diagramPan.y
+          panY: this.diagramPan.y,
+          started: false
         };
         document.addEventListener('mousemove', this._onDiagramPanMove);
         document.addEventListener('mouseup', this._onDiagramPanEnd);
       },
       onDiagramPanMove(ev) {
         if (!this._diagramDrag) return;
+        const dx = ev.clientX - this._diagramDrag.clientX;
+        const dy = ev.clientY - this._diagramDrag.clientY;
+        if (!this._diagramDrag.started) {
+          if (Math.hypot(dx, dy) < PAN_DRAG_THRESHOLD) return;
+          this._diagramDrag.started = true;
+          this.diagramPanDragging = true;
+        }
         ev.preventDefault();
         this.diagramPan = {
-          x: this._diagramDrag.panX + (ev.clientX - this._diagramDrag.clientX),
-          y: this._diagramDrag.panY + (ev.clientY - this._diagramDrag.clientY)
+          x: this._diagramDrag.panX + dx,
+          y: this._diagramDrag.panY + dy
         };
+      },
+      onDiagramDblClick(ev) {
+        const vp = this.getDiagramViewportEl();
+        if (!vp || !ev.target.closest('.plan-diagram-viewport')) return;
+        const group = ev.target.closest('.plan-node-group');
+        if (!group) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.detachDiagramPanListeners();
+        const nodeId = group.getAttribute('data-node-id');
+        const layout = this.diagramLayout;
+        if (!layout || !nodeId) return;
+        const item = layout.nodes.find((n) => n.id === nodeId);
+        if (item && item.data) this.openPlanNodeModal(item.data);
       },
       onDiagramPanEnd() {
         this.detachDiagramPanListeners();
@@ -475,6 +518,23 @@
         if (severity === 'danger') return 'fa-exclamation-circle text-danger';
         if (severity === 'warning') return 'fa-exclamation-triangle text-warning';
         return 'fa-info-circle text-info';
+      },
+      openPlanNodeModal(node) {
+        if (!node) return;
+        const st = this.selectedStatement;
+        this.planNodeDetail = S.buildPlanNodeDetail(node, st ? st.issues : []);
+        this.$nextTick(() => {
+          const el = document.getElementById('planNodeDetailModal');
+          if (!el) return;
+          if (!this.planNodeModalInstance) {
+            this.planNodeModalInstance = new bootstrap.Modal(el);
+          }
+          this.planNodeModalInstance.show();
+        });
+      },
+      closePlanNodeModal() {
+        if (this.planNodeModalInstance) this.planNodeModalInstance.hide();
+        this.planNodeDetail = null;
       },
       showToast(msg) {
         S.showToast(this, msg);

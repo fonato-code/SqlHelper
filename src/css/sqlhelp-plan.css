@@ -117,6 +117,7 @@
   pointer-events: none;
 }
 
+
 .plan-diagram-context-menu {
   position: fixed;
   z-index: 1100;
@@ -198,6 +199,15 @@
 .plan-diagram-svg {
   display: block;
   overflow: visible;
+  pointer-events: auto;
+}
+
+.plan-diagram-svg .plan-edges {
+  pointer-events: none;
+}
+
+.plan-diagram-svg .plan-node-group {
+  pointer-events: all;
 }
 
 /* Edges */
@@ -213,6 +223,23 @@
 }
 
 /* SVG nodes */
+.plan-node-group {
+  cursor: pointer;
+}
+
+.plan-node-alert-triangle {
+  fill: #ffc107;
+  stroke: #b8860b;
+  stroke-width: 1;
+}
+
+.plan-node-alert-count {
+  font-size: 8px;
+  font-weight: 800;
+  fill: #1a1a1a;
+  pointer-events: none;
+}
+
 .plan-node-rect {
   fill: var(--bg-card);
   stroke: var(--border);
@@ -296,6 +323,164 @@
 .plan-alerts-list .list-group-item {
   background: var(--bg-card);
   border-color: var(--border);
+}
+
+/* Modal — tema escuro/claro via variáveis do app */
+#planNodeDetailModal .modal-content {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border-color: var(--border);
+}
+
+#planNodeDetailModal .modal-header,
+#planNodeDetailModal .modal-footer {
+  background: var(--bg-card-header);
+  border-color: var(--border);
+}
+
+#planNodeDetailModal .modal-title {
+  color: var(--text-main);
+}
+
+#planNodeDetailModal .modal-body {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+[data-theme="dark"] #planNodeDetailModal .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+#planNodeDetailModal .btn-secondary {
+  background: var(--bg-table-head);
+  border-color: var(--border);
+  color: var(--text-main);
+}
+
+#planNodeDetailModal .btn-secondary:hover {
+  background: var(--bg-input);
+  color: var(--text-main);
+}
+
+#planNodeDetailModal hr {
+  border-color: var(--border);
+  opacity: 1;
+}
+
+.plan-node-detail-table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-main);
+  --bs-table-border-color: var(--border);
+}
+
+.plan-node-detail-table .plan-node-detail-label {
+  width: 42%;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent !important;
+  vertical-align: top;
+}
+
+.plan-node-detail-table td {
+  font-size: 0.85rem;
+  word-break: break-word;
+  color: var(--text-main);
+}
+
+.plan-node-detail-modal .plan-node-expr {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.65rem;
+  color: var(--text-main);
+  overflow-x: auto;
+  margin: 0;
+}
+
+.plan-node-detail-modal .plan-node-expr--code {
+  background: var(--sql-bg, var(--bg-input));
+}
+
+.plan-node-detail-modal .plan-node-expr--code code.hljs {
+  display: block;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.plan-node-detail-modal .plan-node-expr--warning {
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(220, 53, 69, 0.12);
+}
+
+.plan-node-detail-modal .plan-expr-ref {
+  border-bottom: 1px dotted var(--text-muted);
+  cursor: help;
+  text-decoration: none;
+}
+
+.plan-node-detail-modal .plan-expr-ref:hover {
+  border-bottom-color: #79c0ff;
+}
+
+.plan-node-detail-modal h6.text-danger {
+  color: #f87171 !important;
+}
+
+/* Tabelas striped (Top ops, Table I/O, modal) */
+.plan-data-table.table-striped,
+.plan-node-detail-table.table-striped {
+  --bs-table-striped-color: var(--text-main);
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] .plan-data-table.table-striped,
+[data-theme="light"] .plan-node-detail-table.table-striped {
+  --bs-table-striped-bg: rgba(0, 0, 0, 0.03);
+}
+
+.plan-data-table.table-striped > tbody > tr:nth-of-type(odd) > *,
+.plan-node-detail-table.table-striped > tbody > tr:nth-of-type(odd) > * {
+  --bs-table-color-type: var(--text-main);
+  --bs-table-bg-type: var(--bs-table-striped-bg);
+  color: var(--text-main) !important;
+  background-color: var(--bs-table-striped-bg) !important;
+}
+
+.plan-data-table.table-striped > tbody > tr:nth-of-type(even) > *,
+.plan-node-detail-table.table-striped > tbody > tr:nth-of-type(even) > * {
+  color: var(--text-main) !important;
+  background-color: transparent !important;
+}
+
+.plan-data-table > tbody > tr > *,
+.plan-data-table > thead > tr > * {
+  border-color: var(--border);
+  color: var(--text-main);
+}
+
+.plan-alert-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ffc107;
+  vertical-align: middle;
+}
+
+.plan-alert-count-badge .fa-exclamation-triangle {
+  font-size: 0.85rem;
 }
 
 .plan-tree-item {

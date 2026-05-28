@@ -53,6 +53,138 @@
     return has ? total : null;
   }
 
+  const PLAN_OP_DESCRIPTIONS = {
+    'Clustered Index Scan': 'Scans a clustered index, entirely or only a range.',
+    'Clustered Index Seek': 'Scans a particular range of rows from a clustered index.',
+    'Index Scan': 'Scans a nonclustered index, entirely or only a range.',
+    'Index Seek': 'Scans a particular range of rows from a nonclustered index.',
+    'Table Scan': 'Scans a table.',
+    Sort: 'Reorders the input.',
+    'Stream Aggregate': 'Computes summary values for groups of rows in a sorted stream.',
+    'Hash Match': 'Builds a hash table to match rows from two inputs.',
+    'Merge Join': 'Performs inner join, left outer join, right outer join, or full outer join.',
+    'Nested Loops': 'Performs inner joins, left outer joins, left semi joins, left anti semi joins, right outer joins, right semi joins, right anti semi joins, full outer joins, and cross joins.',
+    Parallelism: 'Consumes multiple input streams and produces multiple output streams.',
+    Filter: 'Removes rows that do not satisfy the predicate.',
+    'Compute Scalar': 'Evaluates an expression to produce a scalar value.',
+    Concatenation: 'Concatenates two or more input streams into a single output stream.'
+  };
+
+  const WARNING_FLAG_LABELS = {
+    NoJoinPredicate: 'Join sem predicado (CROSS JOIN implícito).',
+    SpillToTempDb: 'Operação gerou spill para tempdb.',
+    SpillToTempDbWithStats: 'Spill para tempdb com estatísticas desatualizadas.',
+    UnmatchedIndexes: 'Índices não correspondentes no plano.',
+    ColumnsWithNoStatistics: 'Colunas sem estatísticas.',
+    Warnings: 'Aviso no operador.'
+  };
+
+  function stripBrackets(s) {
+    return String(s || '').replace(/^\[|\]$/g, '');
+  }
+
+  function columnRefLabel(ref) {
+    if (!ref) return '';
+    const col = stripBrackets(attrStr(ref, 'Column'));
+    const table = stripBrackets(attrStr(ref, 'Table'));
+    const schema = stripBrackets(attrStr(ref, 'Schema'));
+    const db = stripBrackets(attrStr(ref, 'Database'));
+    const alias = stripBrackets(attrStr(ref, 'Alias'));
+    if (!table && col) return col;
+    let t = '';
+    if (db) t += '[' + db + '].';
+    if (schema) t += '[' + schema + '].';
+    if (table) t += '[' + table + ']';
+    if (alias) t += ' as [' + alias + ']';
+    if (col) t += (t ? '.' : '') + '[' + col + ']';
+    return t || col;
+  }
+
+  function scalarStringUnder(relOpEl, localName) {
+    const container = localElements(relOpEl, localName)[0];
+    if (!container) return '';
+    for (const el of container.getElementsByTagName('*')) {
+      if (el.namespaceURI !== SHOWPLAN_NS) continue;
+      if (el.localName === 'ScalarOperator' && el.hasAttribute('ScalarString')) {
+        return el.getAttribute('ScalarString');
+      }
+    }
+    return '';
+  }
+
+  function scalarStringsUnder(relOpEl, localName) {
+    const container = localElements(relOpEl, localName)[0];
+    if (!container) return [];
+    const out = [];
+    for (const el of container.getElementsByTagName('*')) {
+      if (el.namespaceURI !== SHOWPLAN_NS) continue;
+      if (el.localName === 'ScalarOperator' && el.hasAttribute('ScalarString')) {
+        const s = el.getAttribute('ScalarString');
+        if (s && !out.includes(s)) out.push(s);
+      }
+    }
+    return out;
+  }
+
+  function extractOutputList(relOpEl) {
+    const ol = firstLocal(relOpEl, 'OutputList');
+    if (!ol) return [];
+    return localElements(ol, 'ColumnReference').map(columnRefLabel).filter(Boolean);
+  }
+
+  function extractOrdered(relOpEl) {
+    const scan = firstLocal(relOpEl, 'IndexScan') || firstLocal(relOpEl, 'IndexSeek');
+    if (!scan || !scan.hasAttribute('Ordered')) return null;
+    return attrStr(scan, 'Ordered') === 'true';
+  }
+
+  function extractSeekPredicates(relOpEl) {
+    const parts = scalarStringsUnder(relOpEl, 'SeekPredicates');
+    return parts.join('\n');
+  }
+
+  function extractOrderBy(relOpEl) {
+    const ob = firstLocal(relOpEl, 'OrderBy');
+    if (!ob) return '';
+    const lines = [];
+    for (const col of localElements(ob, 'OrderByColumn')) {
+      const asc = attrStr(col, 'Ascending') === 'true';
+      const ref = firstLocal(col, 'ColumnReference');
+      const label = columnRefLabel(ref) || '?';
+      lines.push(label + ' ' + (asc ? 'Ascending' : 'Descending'));
+    }
+    return lines.join('\n');
+  }
+
+  function extractGroupBy(relOpEl) {
+    const gb = firstLocal(relOpEl, 'GroupBy');
+    if (!gb) return '';
+    return localElements(gb, 'ColumnReference').map(columnRefLabel).filter(Boolean).join(', ');
+  }
+
+  function extractPartitionColumns(relOpEl) {
+    const pc = firstLocal(relOpEl, 'PartitionColumns');
+    if (!pc) return '';
+    return localElements(pc, 'ColumnReference').map(columnRefLabel).filter(Boolean).join(', ');
+  }
+
+  function extractPartitioningType(relOpEl) {
+    const p = firstLocal(relOpEl, 'Parallelism');
+    if (!p) return '';
+    return attrStr(p, 'PartitioningType');
+  }
+
+  function extractMemoryFractions(relOpEl) {
+    const mf = localElements(relOpEl, 'MemoryFractions')[0];
+    if (!mf) return '';
+    const inp = attrNum(mf, 'Input');
+    const out = attrNum(mf, 'Output');
+    const parts = [];
+    if (inp != null) parts.push('In: ' + (inp * 100).toFixed(2) + '%');
+    if (out != null) parts.push('Out: ' + (out * 100).toFixed(2) + '%');
+    return parts.join(' · ');
+  }
+
   function extractObjectRef(relOp) {
     const obj =
       firstLocal(relOp, 'Object') ||
@@ -65,12 +197,44 @@
       })();
     if (!obj) return null;
     return {
-      database: attrStr(obj, 'Database').replace(/^\[|\]$/g, ''),
-      schema: attrStr(obj, 'Schema').replace(/^\[|\]$/g, ''),
-      table: attrStr(obj, 'Table').replace(/^\[|\]$/g, ''),
-      index: attrStr(obj, 'Index').replace(/^\[|\]$/g, ''),
-      alias: attrStr(obj, 'Alias').replace(/^\[|\]$/g, '')
+      database: stripBrackets(attrStr(obj, 'Database')),
+      schema: stripBrackets(attrStr(obj, 'Schema')),
+      table: stripBrackets(attrStr(obj, 'Table')),
+      index: stripBrackets(attrStr(obj, 'Index')),
+      alias: stripBrackets(attrStr(obj, 'Alias')),
+      indexKind: stripBrackets(attrStr(obj, 'IndexKind'))
     };
+  }
+
+  function formatPlanCost(cost) {
+    const v = Number(cost);
+    if (!Number.isFinite(v)) return null;
+    if (v >= 1) return v.toFixed(7).replace('.', ',');
+    if (v >= 0.001) return v.toFixed(7).replace('.', ',');
+    return v.toExponential(2).replace('.', ',');
+  }
+
+  function formatPlanNumber(n, decimals) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return null;
+    return v.toLocaleString('pt-BR', {
+      minimumFractionDigits: decimals || 0,
+      maximumFractionDigits: decimals != null ? decimals : 2
+    });
+  }
+
+  function formatPlanBytes(bytes) {
+    const v = Number(bytes);
+    if (!Number.isFinite(v) || v < 0) return null;
+    if (v >= 1024) return Math.round(v / 1024) + ' KB';
+    return Math.round(v) + ' B';
+  }
+
+  function estimateDataSizeBytes(rows, avgRowSize) {
+    const r = Number(rows);
+    const s = Number(avgRowSize);
+    if (!Number.isFinite(r) || !Number.isFinite(s)) return null;
+    return r * s;
   }
 
   function extractWarningsFromPlan(queryPlan) {
@@ -152,6 +316,10 @@
       }
     }
 
+    const estimateCpu = attrNum(relOpEl, 'EstimateCPU') || 0;
+    const estimateIo = attrNum(relOpEl, 'EstimateIO') || 0;
+    const avgRowSize = attrNum(relOpEl, 'AvgRowSize');
+
     const node = {
       nodeId: attrStr(relOpEl, 'NodeId'),
       physicalOp,
@@ -161,8 +329,13 @@
       actualRowsRead,
       estimateRowsRead: estRowsRead,
       subtreeCost,
-      estimateCpu: attrNum(relOpEl, 'EstimateCPU') || 0,
-      estimateIo: attrNum(relOpEl, 'EstimateIO') || 0,
+      estimateCpu,
+      estimateIo,
+      estimateOperatorCost: estimateCpu + estimateIo,
+      avgRowSize,
+      estimateRebinds: attrNum(relOpEl, 'EstimateRebinds'),
+      estimateRewinds: attrNum(relOpEl, 'EstimateRewinds'),
+      estimatedExecutionMode: attrStr(relOpEl, 'EstimatedExecutionMode'),
       costPercent:
         statementCost > 0 ? Math.round((subtreeCost / statementCost) * 1000) / 10 : 0,
       parallel,
@@ -174,6 +347,17 @@
       actualElapsedMs: sumRuntimeCounters(relOpEl, 'ActualElapsedms'),
       actualCpuMs: sumRuntimeCounters(relOpEl, 'ActualCPUms'),
       actualExecutions: sumRuntimeCounters(relOpEl, 'ActualExecutions'),
+      actualRebinds: sumRuntimeCounters(relOpEl, 'ActualRebinds'),
+      actualRewinds: sumRuntimeCounters(relOpEl, 'ActualRewinds'),
+      ordered: extractOrdered(relOpEl),
+      outputList: extractOutputList(relOpEl),
+      predicate: scalarStringUnder(relOpEl, 'Predicate'),
+      seekPredicates: extractSeekPredicates(relOpEl),
+      orderBy: extractOrderBy(relOpEl),
+      groupBy: extractGroupBy(relOpEl),
+      partitionColumns: extractPartitionColumns(relOpEl),
+      partitioningType: extractPartitioningType(relOpEl),
+      memoryFractions: extractMemoryFractions(relOpEl),
       warnings: relWarnings,
       rowMismatch: rowMismatchLevel(estRows, actualRows),
       isScan: SCAN_OPS.test(physicalOp) || SCAN_OPS.test(logicalOp),
@@ -375,7 +559,8 @@
         issues.push({
           severity: 'warning',
           code: 'cartesian',
-          message: `Join sem predicado (CROSS JOIN implícito) no nó ${n.nodeId} — ${n.physicalOp}`
+          message: `Join sem predicado (CROSS JOIN implícito) no nó ${n.nodeId} — ${n.physicalOp}`,
+          nodeId: n.nodeId
         });
       }
       if (n.isScan && n.tableCardinality > 1000 && (n.costPercent || 0) >= 5) {
@@ -463,11 +648,125 @@
     };
   }
 
-  function highlightSql(sql) {
-    const escaped = String(sql || '')
+  function escapeHtml(text) {
+    return String(text || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  function escapeAttr(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;');
+  }
+
+  function splitPlanLogicalLines(expr) {
+    let s = String(expr || '').trim();
+    if (!s) return '';
+    s = s.replace(/([)\]'"0-9])(\s*)(AND|OR)(\s+)/gi, '$1\n$3 ');
+    s = s.replace(/\s+(AND|OR)\s+/gi, '\n$1 ');
+    if (!/\b(AND|OR)\b/i.test(s) && s.includes(',')) {
+      s = s.split(/,\s*/).join(',\n');
+    }
+    return s
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  function simplifyPathRefs(text) {
+    const refs = [];
+    let idx = 0;
+    function placeholder(display, full) {
+      const token = '@@PLANREF' + idx + '@@';
+      refs.push({ token, display, title: full });
+      idx += 1;
+      return token;
+    }
+
+    let out = text;
+
+    out = out.replace(
+      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+\])\.\[([^\]]+)\]/gi,
+      (full, _db, _sch, _tbl, _col, alias, acol) => placeholder(alias + '.[' + acol + ']', full)
+    );
+
+    out = out.replace(
+      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+)\]\.\[([^\]]+)\]/gi,
+      (full, _a, _b, _col, alias, acol) => placeholder(alias + '.[' + acol + ']', full)
+    );
+
+    out = out.replace(
+      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+)\]/gi,
+      (full, _db, _sch, _tbl, alias) => placeholder(alias, full)
+    );
+
+    out = out.replace(
+      /\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+)\]/gi,
+      (full, _sch, _tbl, alias) => placeholder(alias, full)
+    );
+
+    return { text: out, refs };
+  }
+
+  function highlightExprCode(text) {
+    const g = typeof window !== 'undefined' ? window : global;
+    if (typeof g.hljs !== 'undefined' && typeof g.hljs.highlight === 'function') {
+      try {
+        return g.hljs.highlight(text, { language: 'sql', ignoreIllegals: true }).value;
+      } catch (e) {
+        /* fallback */
+      }
+    }
+    if (SqlHelp.highlightSql && SqlHelp.highlightSql !== highlightPlanSql) {
+      return SqlHelp.highlightSql(text);
+    }
+    const escaped = escapeHtml(text);
+    const keywords =
+      /\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|CROSS|ON|AND|OR|NOT|IN|EXISTS|GROUP|BY|ORDER|HAVING|INSERT|INTO|UPDATE|SET|DELETE|VALUES|AS|CASE|WHEN|THEN|ELSE|END|WITH|UNION|ALL|DISTINCT|TOP|DECLARE|CREATE|TABLE|INDEX|PIVOT|FOR|OPENJSON|APPLY|STRING_AGG|CAST|CONVERT|IS|NULL|LIKE|BETWEEN|dateadd|CONVERT_IMPLICIT)\b/gi;
+    return escaped.replace(keywords, '<span class="sql-kw">$1</span>');
+  }
+
+  function injectRefSpans(html, refs) {
+    let out = html;
+    for (const r of refs) {
+      const span =
+        '<span class="plan-expr-ref" title="' +
+        escapeAttr(r.title) +
+        '">' +
+        escapeHtml(r.display) +
+        '</span>';
+      out = out.split(r.token).join(span);
+    }
+    return out;
+  }
+
+  function formatPlanExprHtml(expr) {
+    const raw = String(expr || '').trim();
+    if (!raw) return '';
+    const lined = splitPlanLogicalLines(raw);
+    const { text, refs } = simplifyPathRefs(lined);
+    let html = highlightExprCode(text);
+    html = injectRefSpans(html, refs);
+    return '<code class="hljs language-sql">' + html + '</code>';
+  }
+
+  function highlightPlanSql(sql) {
+    const g = typeof window !== 'undefined' ? window : global;
+    if (SqlHelp.highlightSql && typeof SqlHelp.highlightSql === 'function') {
+      return SqlHelp.highlightSql(sql);
+    }
+    if (typeof g.hljs !== 'undefined' && typeof g.hljs.highlight === 'function') {
+      try {
+        return g.hljs.highlight(String(sql || ''), { language: 'sql', ignoreIllegals: true }).value;
+      } catch (e) {
+        /* fallback */
+      }
+    }
+    const escaped = escapeHtml(sql);
     const keywords =
       /\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|CROSS|ON|AND|OR|NOT|IN|EXISTS|GROUP|BY|ORDER|HAVING|INSERT|INTO|UPDATE|SET|DELETE|VALUES|AS|CASE|WHEN|THEN|ELSE|END|WITH|UNION|ALL|DISTINCT|TOP|DECLARE|CREATE|TABLE|INDEX|PIVOT|FOR|OPENJSON|APPLY|OUTER|STRING_AGG|CAST|CONVERT)\b/gi;
     return escaped.replace(keywords, '<span class="sql-kw">$1</span>');
@@ -582,10 +881,156 @@
     }
   ];
 
+  function nodeIdMatches(issueNodeId, nodeId) {
+    if (issueNodeId == null || issueNodeId === '') return false;
+    return String(issueNodeId) === String(nodeId);
+  }
+
+  function getNodeIssues(statementIssues, nodeId) {
+    return (statementIssues || []).filter((i) => nodeIdMatches(i.nodeId, nodeId));
+  }
+
+  function getNodeAlertCount(node, statementIssues) {
+    if (!node) return 0;
+    let n = (node.warnings || []).length;
+    n += getNodeIssues(statementIssues, node.nodeId).length;
+    if (node.rowMismatch === 'high' || node.rowMismatch === 'medium') n += 1;
+    return n;
+  }
+
+  function getNodeAlertMessages(node, statementIssues) {
+    if (!node) return [];
+    const msgs = [];
+    for (const w of node.warnings || []) {
+      msgs.push(WARNING_FLAG_LABELS[w] || w);
+    }
+    for (const i of getNodeIssues(statementIssues, node.nodeId)) {
+      msgs.push(i.message);
+    }
+    if (node.rowMismatch === 'high' || node.rowMismatch === 'medium') {
+      msgs.push(
+        'Estimativa de linhas divergente: estimado ' +
+          node.estimateRows +
+          ', atual ' +
+          node.actualRows
+      );
+    }
+    return msgs;
+  }
+
+  function pushDetailProp(list, label, value) {
+    if (value != null && value !== '' && value !== '—') list.push({ label, value });
+  }
+
+  function buildPlanNodeDetail(node, statementIssues) {
+    if (!node) return null;
+    const title = node.physicalOp || node.logicalOp || 'Operador';
+    const description = PLAN_OP_DESCRIPTIONS[node.physicalOp] || PLAN_OP_DESCRIPTIONS[node.logicalOp] || '';
+    const properties = [];
+
+    pushDetailProp(properties, 'Node ID', node.nodeId);
+    pushDetailProp(properties, 'Physical Operation', node.physicalOp);
+    pushDetailProp(properties, 'Logical Operation', node.logicalOp);
+    pushDetailProp(properties, 'Execution Mode', node.estimatedExecutionMode);
+    pushDetailProp(properties, 'Partitioning Type', node.partitioningType);
+    pushDetailProp(properties, 'Actual Rows', formatPlanNumber(node.actualRows, 0));
+    pushDetailProp(properties, 'Actual Rows Read', formatPlanNumber(node.actualRowsRead, 0));
+    pushDetailProp(properties, 'Estimated Rows', formatPlanNumber(node.estimateRows, 0));
+    pushDetailProp(
+      properties,
+      'Estimated Rows To Be Read',
+      formatPlanNumber(node.estimateRowsRead, 0)
+    );
+    pushDetailProp(properties, 'Actual Executions', formatPlanNumber(node.actualExecutions, 0));
+    pushDetailProp(properties, 'Estimated I/O Cost', formatPlanCost(node.estimateIo));
+    pushDetailProp(properties, 'Estimated CPU Cost', formatPlanCost(node.estimateCpu));
+    const opCost = formatPlanCost(node.estimateOperatorCost);
+    if (opCost != null) {
+      const pct = Number(node.costPercent);
+      const pctStr = Number.isFinite(pct) ? ' (' + pct.toFixed(1).replace('.', ',') + '%)' : '';
+      pushDetailProp(properties, 'Estimated Operator Cost', opCost + pctStr);
+    }
+    pushDetailProp(properties, 'Estimated Subtree Cost', formatPlanCost(node.subtreeCost));
+    pushDetailProp(properties, 'Estimated Row Size', node.avgRowSize != null ? node.avgRowSize + ' B' : null);
+    pushDetailProp(
+      properties,
+      'Actual Data Size',
+      formatPlanBytes(estimateDataSizeBytes(node.actualRows, node.avgRowSize))
+    );
+    pushDetailProp(
+      properties,
+      'Estimated Data Size',
+      formatPlanBytes(estimateDataSizeBytes(node.estimateRows, node.avgRowSize))
+    );
+    pushDetailProp(properties, 'Actual Rebinds', formatPlanNumber(node.actualRebinds, 0));
+    pushDetailProp(properties, 'Actual Rewinds', formatPlanNumber(node.actualRewinds, 0));
+    pushDetailProp(properties, 'Estimated Rebinds', formatPlanNumber(node.estimateRebinds, 1));
+    pushDetailProp(properties, 'Estimated Rewinds', formatPlanNumber(node.estimateRewinds, 1));
+    if (node.ordered != null) {
+      pushDetailProp(properties, 'Ordered', node.ordered ? 'True' : 'False');
+    }
+
+    const sections = [];
+    const obj = node.objectRef;
+    if (obj && (obj.database || obj.table)) {
+      if (obj.database) pushDetailProp(properties, 'Database', '[' + obj.database + ']');
+      let tableLine = formatPlanObjectTable(obj);
+      if (obj.alias && obj.alias !== obj.table) tableLine += ' as [' + obj.alias + ']';
+      pushDetailProp(properties, 'Table', tableLine);
+      const idx = formatPlanObjectIndex(obj);
+      if (idx) {
+        const idxLabel =
+          obj.indexKind && /cluster/i.test(obj.indexKind) ? 'Clustered Index' : 'Index';
+        pushDetailProp(properties, idxLabel, idx);
+      }
+    }
+
+    if (node.predicate) {
+      sections.push({ title: 'Predicate', content: node.predicate, variant: 'code' });
+    }
+    if (node.seekPredicates) {
+      sections.push({ title: 'Seek Predicates', content: node.seekPredicates, variant: 'code' });
+    }
+    if (node.orderBy) {
+      sections.push({ title: 'Order By', content: node.orderBy, variant: 'code' });
+    }
+    if (node.groupBy) {
+      sections.push({ title: 'Group By', content: node.groupBy, variant: 'code' });
+    }
+    if (node.partitionColumns) {
+      sections.push({ title: 'Partition Columns', content: node.partitionColumns, variant: 'code' });
+    }
+    if (node.memoryFractions) {
+      sections.push({ title: 'Memory Fractions', content: node.memoryFractions, variant: 'code' });
+    }
+    if (node.outputList && node.outputList.length) {
+      sections.push({
+        title: 'Output List',
+        content: node.outputList.join(', '),
+        variant: 'code'
+      });
+    }
+
+    const alertMsgs = getNodeAlertMessages(node, statementIssues);
+    if (alertMsgs.length) {
+      sections.push({
+        title: 'Warnings',
+        content: alertMsgs.join('\n'),
+        variant: 'warning'
+      });
+    }
+
+    return { title, description, properties, sections };
+  }
+
   SqlHelp.parseShowPlanXml = parseShowPlanXml;
-  SqlHelp.highlightPlanSql = highlightSql;
+  SqlHelp.highlightPlanSql = highlightPlanSql;
+  SqlHelp.formatPlanExprHtml = formatPlanExprHtml;
   SqlHelp.formatPlanObjectTable = formatPlanObjectTable;
   SqlHelp.formatPlanObjectIndex = formatPlanObjectIndex;
+  SqlHelp.getNodeAlertCount = getNodeAlertCount;
+  SqlHelp.getNodeAlertMessages = getNodeAlertMessages;
+  SqlHelp.buildPlanNodeDetail = buildPlanNodeDetail;
   SqlHelp.applyDiagramCostMode = applyDiagramCostMode;
   SqlHelp.DIAGRAM_COST_MODES = DIAGRAM_COST_MODES;
   SqlHelp.DIAGRAM_COST_SCOPES = DIAGRAM_COST_SCOPES;

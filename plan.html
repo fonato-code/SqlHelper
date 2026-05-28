@@ -8,6 +8,8 @@
   <link href="src/fontawesome5pro/fontawesome-pro-5.8.2.css" rel="stylesheet">
   <link href="src/css/sqlhelp-common.css" rel="stylesheet">
   <link href="src/css/sqlhelp-plan.css" rel="stylesheet">
+  <link id="hljs-light" href="src/css/highlight-github.css" rel="stylesheet" disabled>
+  <link id="hljs-dark" href="src/css/highlight-github-dark.css" rel="stylesheet">
   <title>SqlHelp — Plano de execução</title>
 </head>
 <body>
@@ -221,7 +223,11 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                 <button type="button" class="nav-link" :class="{ active: planTab === 'alerts' }" @click="planTab = 'alerts'">
                   Alerta
                   <span v-if="selectedStatement.issues.length"
-                        class="badge bg-warning text-dark ms-1">{{ selectedStatement.issues.length }}</span>
+                        class="plan-alert-count-badge ms-1"
+                        :title="selectedStatement.issues.length + ' alerta(s)'">
+                    <i class="fal fa-exclamation-triangle"></i>
+                    <span>{{ selectedStatement.issues.length }}</span>
+                  </span>
                 </button>
               </li>
             </ul>
@@ -249,7 +255,7 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                   <span class="ms-1 d-none d-sm-inline">{{ diagramFullscreen ? 'Sair' : 'Tela cheia' }}</span>
                 </button>
                 <span class="small text-muted ms-auto">
-                  <span class="d-none d-md-inline">Scroll = zoom · Arrastar = mover · Botão direito = opções ·</span>
+                  <span class="d-none d-md-inline">Scroll = zoom · Arrastar = mover · Duplo clique no nó = detalhes · Botão direito = opções ·</span>
                   Custo: <strong>{{ diagramCostModeLabel }}</strong>
                 </span>
               </div>
@@ -258,6 +264,7 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                    :class="{ 'plan-diagram-panning': diagramPanDragging }"
                    @wheel="onDiagramWheel"
                    @mousedown="onDiagramPanStart"
+                   @dblclick="onDiagramDblClick"
                    @contextmenu.prevent="onDiagramContextMenu">
                 <div class="plan-diagram-stage" :style="diagramStageStyle">
                   <plan-diagram-canvas :key="diagramCanvasKey" :layout="diagramLayout"></plan-diagram-canvas>
@@ -308,7 +315,7 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
             </div>
 
             <div v-show="planTab === 'top'" class="table-responsive">
-              <table class="table table-sm table-striped mb-0">
+              <table class="table table-sm table-striped plan-data-table mb-0">
                 <thead>
                   <tr>
                     <th>Nó</th>
@@ -336,7 +343,7 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
             </div>
 
             <div v-show="planTab === 'io'" class="table-responsive">
-              <table class="table table-sm table-striped mb-0">
+              <table class="table table-sm table-striped plan-data-table mb-0">
                 <thead>
                   <tr>
                     <th>Tabela</th>
@@ -380,6 +387,48 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
       </template>
     </main>
 
+    <div class="modal fade" id="planNodeDetailModal" tabindex="-1" aria-labelledby="planNodeDetailModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" v-if="planNodeDetail">
+          <div class="modal-header">
+            <div>
+              <h5 class="modal-title" id="planNodeDetailModalLabel">{{ planNodeDetail.title }}</h5>
+              <p v-if="planNodeDetail.description" class="small text-muted mb-0 mt-1">
+                {{ planNodeDetail.description }}
+              </p>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"
+                    @click="closePlanNodeModal"></button>
+          </div>
+          <div class="modal-body plan-node-detail-modal">
+            <table class="table table-sm table-striped plan-node-detail-table mb-0">
+              <tbody>
+                <tr v-for="(prop, idx) in planNodeDetail.properties" :key="'p-' + idx">
+                  <th scope="row" class="plan-node-detail-label">{{ prop.label }}</th>
+                  <td>{{ prop.value }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <template v-for="(sec, idx) in planNodeDetail.sections" :key="'s-' + idx">
+              <hr class="my-3">
+              <h6 class="fw-semibold mb-2"
+                  :class="{ 'text-danger': sec.variant === 'warning' }">{{ sec.title }}</h6>
+              <pre v-if="sec.variant === 'code'"
+                   class="plan-node-expr plan-node-expr--code mb-0"
+                   v-html="formatPlanExprHtml(sec.content)"></pre>
+              <pre v-else-if="sec.variant === 'warning'"
+                   class="plan-node-expr plan-node-expr--warning mb-0 text-danger">{{ sec.content }}</pre>
+              <p v-else class="mb-0 small">{{ sec.content }}</p>
+            </template>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"
+                    @click="closePlanNodeModal">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
       <div class="toast align-items-center text-bg-success border-0" ref="toastEl" role="alert">
         <div class="d-flex">
@@ -394,9 +443,23 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
 
   <script src="src/js/vue.js"></script>
   <script src="src/js/bootstrap-v5.3.8.js"></script>
+  <script src="src/js/highlight.min.js"></script>
   <script src="src/js/sqlhelp-ui.js"></script>
+  <script src="src/js/sqlhelp-markdown.js"></script>
   <script src="src/js/sqlhelp-plan-parser.js"></script>
   <script src="src/js/sqlhelp-plan-diagram.js"></script>
+  <script>
+    (function () {
+      var orig = SqlHelp.themeMixin.methods.applyTheme;
+      SqlHelp.themeMixin.methods.applyTheme = function (theme) {
+        orig.call(this, theme);
+        var light = document.getElementById('hljs-light');
+        var dark = document.getElementById('hljs-dark');
+        if (light) light.disabled = theme === 'dark';
+        if (dark) dark.disabled = theme !== 'dark';
+      };
+    })();
+  </script>
   <script src="src/js/plan-app.js"></script>
 </body>
 </html>
