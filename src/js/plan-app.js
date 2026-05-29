@@ -157,11 +157,13 @@
       highlightedSql() {
         const st = this.selectedStatement;
         if (!st) return '';
-        return S.highlightPlanSql(st.statementText);
+        const text = st.statementTextDisplay != null ? st.statementTextDisplay : st.statementText;
+        return S.highlightPlanSql(text);
       },
       statementSqlText() {
         const st = this.selectedStatement;
-        return st ? String(st.statementText || '') : '';
+        if (!st) return '';
+        return st.statementTextDisplay != null ? st.statementTextDisplay : String(st.statementText || '');
       },
       statementSqlLineCount() {
         const t = this.statementSqlText;
@@ -170,6 +172,12 @@
       },
       statementSqlCharCount() {
         return this.statementSqlText.length;
+      },
+      planStatementTextLimit() {
+        return 4000;
+      },
+      planStatementTruncatedMarker() {
+        return S.PLAN_STATEMENT_TRUNCATED_MARKER || '/*...<TRUNCATED>...*/';
       },
       diagramZoomPct() {
         return Math.round(this.diagramZoom * 100);

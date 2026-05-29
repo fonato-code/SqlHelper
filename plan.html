@@ -441,9 +441,17 @@
             </div>
 
             <div v-show="planTab === 'query'" class="plan-sql-tab-panel">
+              <div v-if="selectedStatement.statementTextTruncated"
+                   class="alert alert-warning py-2 px-3 small mb-2">
+                <i class="fal fa-exclamation-triangle me-1"></i>
+                O SQL no plano foi truncado pelo SQL Server (limite de {{ planStatementTextLimit }} caracteres no ShowPlanXML).
+                O trecho exibido termina com <code>{{ planStatementTruncatedMarker }}</code>.
+                Para ver a consulta completa, abra o texto original no SSMS ou na janela de propriedades do statement.
+              </div>
               <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <span class="small text-muted">
                   {{ statementSqlLineCount }} linha(s) · {{ statementSqlCharCount }} caractere(s)
+                  <span v-if="selectedStatement.statementTextTruncated" class="text-warning"> · truncado</span>
                 </span>
                 <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
                         @click="copyStatementSql" title="Copiar consulta">

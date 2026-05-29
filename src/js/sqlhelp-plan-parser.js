@@ -27,6 +27,9 @@
     return el && el.hasAttribute(name) ? el.getAttribute(name) : '';
   }
 
+  const PLAN_STATEMENT_TEXT_LIMIT = 4000;
+  const PLAN_STATEMENT_TRUNCATED_MARKER = '/*...<TRUNCATED>...*/';
+
   function decodeStatementText(text) {
     return String(text || '')
       .replace(/&#xD;&#xA;/g, '\n')
@@ -36,6 +39,55 @@
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&amp;/g, '&');
+  }
+
+  function extractStatementTextRaw(rawXml, statementId) {
+    if (!rawXml || statementId == null || statementId === '') return { text: '', encodedLen: 0 };
+    const id = String(statementId).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(
+      '<(?:[\\w-]+:)?StmtSimple\\b[^>]*\\bStatementId="' +
+        id +
+        '"[^>]*\\bStatementText="((?:[^"&]|&(?:#x?[0-9A-Fa-f]+|quot|lt|gt|amp);)*)"',
+      'i'
+    );
+    const m = rawXml.match(re);
+    if (!m) return { text: '', encodedLen: 0 };
+    return { text: decodeStatementText(m[1]), encodedLen: m[1].length };
+  }
+
+  function isStatementTextTruncated(text, encodedLen) {
+    const len = String(text || '').length;
+    if (len >= PLAN_STATEMENT_TEXT_LIMIT - 1) return true;
+    if (encodedLen != null && encodedLen >= PLAN_STATEMENT_TEXT_LIMIT - 1) return true;
+    const trimmed = String(text || '').trimEnd();
+    if (!trimmed) return false;
+    if (/[;,)]$/.test(trimmed)) return false;
+    if (/\bEND\s*$/i.test(trimmed)) return false;
+    if (/\bGO\s*$/i.test(trimmed)) return false;
+    if (/\bor\s*\(\s*[\w.[\]]*$/i.test(trimmed)) return true;
+    if (/\bwhen\s+[^;]*$/i.test(trimmed) && !/\bend\b/i.test(trimmed.slice(-80))) return true;
+    return false;
+  }
+
+  function resolveStatementText(stmtEl, rawXml) {
+    const statementId = attrStr(stmtEl, 'StatementId');
+    let text = decodeStatementText(attrStr(stmtEl, 'StatementText'));
+    let encodedLen = null;
+    if (rawXml) {
+      const raw = extractStatementTextRaw(rawXml, statementId);
+      encodedLen = raw.encodedLen;
+      if (raw.text.length > text.length) text = raw.text;
+    }
+    const truncated = isStatementTextTruncated(text, encodedLen);
+    const hasMarker = text.indexOf(PLAN_STATEMENT_TRUNCATED_MARKER) !== -1;
+    const statementText = hasMarker
+      ? text.replace(/\s*\/\*\.\.\.<TRUNCATED>\.\.\.\*\/\s*$/i, '').trimEnd()
+      : text;
+    const statementTextDisplay =
+      truncated && !hasMarker
+        ? statementText + '\n' + PLAN_STATEMENT_TRUNCATED_MARKER
+        : text;
+    return { statementText, statementTextDisplay, statementTextTruncated: truncated };
   }
 
   function sumRuntimeCounters(relOp, field) {
@@ -436,9 +488,12 @@
       .sort((a, b) => b.logicalReads - a.logicalReads);
   }
 
-  function parseStatement(stmtEl, batchIndex) {
+  function parseStatement(stmtEl, batchIndex, rawXml) {
     const tag = stmtEl.localName;
-    const statementText = decodeStatementText(attrStr(stmtEl, 'StatementText'));
+    const stmtText = resolveStatementText(stmtEl, rawXml);
+    const statementText = stmtText.statementText;
+    const statementTextDisplay = stmtText.statementTextDisplay;
+    const statementTextTruncated = stmtText.statementTextTruncated;
     const statementCost = attrNum(stmtEl, 'StatementSubTreeCost') || 0;
     const statementEstRows = attrNum(stmtEl, 'StatementEstRows');
     const queryPlan = firstLocal(stmtEl, 'QueryPlan');
@@ -494,6 +549,8 @@
       statementType: attrStr(stmtEl, 'StatementType'),
       optmLevel: attrStr(stmtEl, 'StatementOptmLevel'),
       statementText,
+      statementTextDisplay,
+      statementTextTruncated,
       statementPreview: statementText.replace(/\s+/g, ' ').trim().slice(0, 120),
       statementCost,
       statementEstRows,
@@ -573,7 +630,7 @@
     return issues;
   }
 
-  function collectStatements(doc) {
+  function collectStatements(doc, rawXml) {
     const statements = [];
     const batches = localElements(doc.documentElement, 'Batch');
     batches.forEach((batch, batchIndex) => {
@@ -585,11 +642,11 @@
           if (child.localName === 'StmtCond') {
             for (const inner of child.children) {
               if (inner.localName === 'StmtSimple' && inner.namespaceURI === SHOWPLAN_NS) {
-                statements.push(parseStatement(inner, batchIndex));
+                statements.push(parseStatement(inner, batchIndex, rawXml));
               }
             }
           } else {
-            statements.push(parseStatement(child, batchIndex));
+            statements.push(parseStatement(child, batchIndex, rawXml));
           }
         }
       }
@@ -612,7 +669,7 @@
       throw new Error('Arquivo não reconhecido. Esperado ShowPlanXML de plano de execução do SQL Server.');
     }
 
-    const statements = collectStatements(doc);
+    const statements = collectStatements(doc, text);
     if (!statements.length) {
       throw new Error('Nenhum statement encontrado no plano.');
     }
@@ -1109,6 +1166,7 @@
   }
 
   SqlHelp.findPlanNodeById = findPlanNodeById;
+  SqlHelp.PLAN_STATEMENT_TRUNCATED_MARKER = PLAN_STATEMENT_TRUNCATED_MARKER;
   SqlHelp.parseShowPlanXml = parseShowPlanXml;
   SqlHelp.highlightPlanSql = highlightPlanSql;
   SqlHelp.formatPlanExprHtml = formatPlanExprHtml;

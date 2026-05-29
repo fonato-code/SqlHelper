@@ -88,6 +88,12 @@
   word-break: normal;
 }
 
+.plan-sql-view .hljs-comment:last-child,
+.plan-sql-view .sql-truncated-marker {
+  color: #f0a020 !important;
+  font-weight: 600;
+}
+
 .plan-sql-view .sql-kw {
   color: #569cd6;
   font-weight: 600;
