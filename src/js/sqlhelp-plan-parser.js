@@ -121,18 +121,10 @@
   function columnRefLabel(ref) {
     if (!ref) return '';
     const col = stripBrackets(attrStr(ref, 'Column'));
-    const table = stripBrackets(attrStr(ref, 'Table'));
-    const schema = stripBrackets(attrStr(ref, 'Schema'));
-    const db = stripBrackets(attrStr(ref, 'Database'));
     const alias = stripBrackets(attrStr(ref, 'Alias'));
-    if (!table && col) return col;
-    let t = '';
-    if (db) t += '[' + db + '].';
-    if (schema) t += '[' + schema + '].';
-    if (table) t += '[' + table + ']';
-    if (alias) t += ' as [' + alias + ']';
-    if (col) t += (t ? '.' : '') + '[' + col + ']';
-    return t || col;
+    if (alias && col) return '[' + alias + '].[' + col + ']';
+    if (alias) return '[' + alias + ']';
+    return columnRefFullLabel(ref) || (col ? '[' + col + ']' : '');
   }
 
   function scalarStringUnder(relOpEl, localName) {
@@ -173,9 +165,131 @@
     return attrStr(scan, 'Ordered') === 'true';
   }
 
+  function columnRefFullLabel(ref) {
+    if (!ref) return '';
+    const col = stripBrackets(attrStr(ref, 'Column'));
+    const table = stripBrackets(attrStr(ref, 'Table'));
+    const schema = stripBrackets(attrStr(ref, 'Schema'));
+    const db = stripBrackets(attrStr(ref, 'Database'));
+    const parts = [];
+    if (db) parts.push('[' + db + ']');
+    if (schema) parts.push('[' + schema + ']');
+    if (table) parts.push('[' + table + ']');
+    if (col) parts.push('[' + col + ']');
+    return parts.join('.');
+  }
+
+  const SCAN_TYPE_OPS = {
+    EQ: '=',
+    GE: '>=',
+    GT: '>',
+    LE: '<=',
+    LT: '<',
+    NE: '<>',
+    IS: 'IS',
+    'IS NOT': 'IS NOT',
+    'IS NULL': 'IS NULL',
+    'IS NOT NULL': 'IS NOT NULL',
+    'BINARY IS': 'IS'
+  };
+
+  function directScalarStrings(containerEl) {
+    if (!containerEl) return [];
+    const out = [];
+    for (const child of containerEl.children) {
+      if (child.namespaceURI !== SHOWPLAN_NS) continue;
+      if (child.localName === 'ScalarOperator' && child.hasAttribute('ScalarString')) {
+        out.push(child.getAttribute('ScalarString'));
+      }
+    }
+    return out;
+  }
+
+  function buildScanRange(scanRangeEl) {
+    if (!scanRangeEl) return '';
+    const scanType = (attrStr(scanRangeEl, 'ScanType') || 'EQ').toUpperCase();
+    const op = SCAN_TYPE_OPS[scanType] || scanType;
+    const rangeColsContainer = firstLocal(scanRangeEl, 'RangeColumns');
+    const rangeExprContainer = firstLocal(scanRangeEl, 'RangeExpressions');
+    const cols = rangeColsContainer ? localElements(rangeColsContainer, 'ColumnReference') : [];
+    const exprs = directScalarStrings(rangeExprContainer);
+    const parts = [];
+
+    for (let i = 0; i < Math.max(cols.length, exprs.length); i++) {
+      const colLabel = columnRefFullLabel(cols[i]);
+      const expr = exprs[i] || '';
+      if (!colLabel && !expr) continue;
+      if (scanType === 'IS NULL' || scanType === 'IS NOT NULL') {
+        parts.push(colLabel + ' ' + op);
+      } else if (colLabel && expr) {
+        parts.push(colLabel + ' ' + op + ' ' + expr);
+      } else if (colLabel) {
+        parts.push(colLabel + ' ' + op);
+      } else {
+        parts.push(expr);
+      }
+    }
+    return parts.join(' AND ');
+  }
+
+  function collectSeekRangeLines(seekPredEl) {
+    if (!seekPredEl) return [];
+    const lines = [];
+    const isNotNull = firstLocal(seekPredEl, 'IsNotNull');
+    if (isNotNull) {
+      const ref = firstLocal(isNotNull, 'ColumnReference');
+      const label = columnRefFullLabel(ref);
+      if (label) lines.push(label + ' IS NOT NULL');
+    }
+    for (const child of seekPredEl.children) {
+      if (child.namespaceURI !== SHOWPLAN_NS) continue;
+      const ln = child.localName;
+      if (ln === 'Prefix' || ln === 'StartRange' || ln === 'EndRange') {
+        const built = buildScanRange(child);
+        if (built) lines.push(built);
+      }
+    }
+    return lines;
+  }
+
+  function findSeekPredicatesContainer(relOpEl) {
+    let sp = firstLocal(relOpEl, 'SeekPredicates');
+    if (sp) return sp;
+    const indexOp =
+      firstLocal(relOpEl, 'IndexSeek') ||
+      firstLocal(relOpEl, 'IndexScan') ||
+      firstLocal(relOpEl, 'ClusteredIndexSeek') ||
+      firstLocal(relOpEl, 'ClusteredIndexScan');
+    return indexOp ? firstLocal(indexOp, 'SeekPredicates') : null;
+  }
+
   function extractSeekPredicates(relOpEl) {
-    const parts = scalarStringsUnder(relOpEl, 'SeekPredicates');
-    return parts.join('\n');
+    const spContainer = findSeekPredicatesContainer(relOpEl);
+    if (!spContainer) return '';
+
+    const lines = [];
+    const seen = new Set();
+
+    function addLine(line) {
+      const t = String(line || '').trim();
+      if (!t || seen.has(t)) return;
+      seen.add(t);
+      lines.push(t);
+    }
+
+    for (const sp of localElements(spContainer, 'SeekPredicate')) {
+      for (const line of collectSeekRangeLines(sp)) addLine(line);
+    }
+    for (const spn of localElements(spContainer, 'SeekPredicateNew')) {
+      for (const keys of localElements(spn, 'SeekKeys')) {
+        for (const line of collectSeekRangeLines(keys)) addLine(line);
+      }
+    }
+    for (const keys of localElements(spContainer, 'SeekKeys')) {
+      for (const line of collectSeekRangeLines(keys)) addLine(line);
+    }
+
+    return lines.join('\n');
   }
 
   function extractOrderBy(relOpEl) {
@@ -717,14 +831,32 @@
       .replace(/</g, '&lt;');
   }
 
+  function splitCommasOutsideParens(text) {
+    const s = String(text || '');
+    if (!s.includes(',')) return s;
+    const parts = [];
+    let depth = 0;
+    let seg = '';
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth = Math.max(0, depth - 1);
+      else if (ch === ',' && depth === 0) {
+        if (seg.trim()) parts.push(seg.trim());
+        seg = '';
+        continue;
+      }
+      seg += ch;
+    }
+    if (seg.trim()) parts.push(seg.trim());
+    return parts.length > 1 ? parts.join(',\n') : s;
+  }
+
   function splitPlanLogicalLines(expr) {
     let s = String(expr || '').trim();
     if (!s) return '';
     s = s.replace(/([)\]'"0-9])(\s*)(AND|OR)(\s+)/gi, '$1\n$3 ');
     s = s.replace(/\s+(AND|OR)\s+/gi, '\n$1 ');
-    if (!/\b(AND|OR)\b/i.test(s) && s.includes(',')) {
-      s = s.split(/,\s*/).join(',\n');
-    }
     return s
       .split('\n')
       .map((line) => line.trim())
@@ -745,22 +877,27 @@
     let out = text;
 
     out = out.replace(
+      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]/g,
+      (full, _db, _sch, _tbl, col) => placeholder(stripBrackets(col), full)
+    );
+
+    out = out.replace(
       /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+\])\.\[([^\]]+)\]/gi,
       (full, _db, _sch, _tbl, _col, alias, acol) => placeholder(alias + '.[' + acol + ']', full)
     );
 
     out = out.replace(
-      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+)\]\.\[([^\]]+)\]/gi,
+      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+\])\.\[([^\]]+)\]/gi,
       (full, _a, _b, _col, alias, acol) => placeholder(alias + '.[' + acol + ']', full)
     );
 
     out = out.replace(
-      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+)\]/gi,
+      /\[([^\]]+)\]\.\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+\])/gi,
       (full, _db, _sch, _tbl, alias) => placeholder(alias, full)
     );
 
     out = out.replace(
-      /\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+)\]/gi,
+      /\[([^\]]+)\]\.\[([^\]]+)\]\s+as\s+(\[[^\]]+\])/gi,
       (full, _sch, _tbl, alias) => placeholder(alias, full)
     );
 
@@ -795,10 +932,13 @@
     );
   }
 
-  function formatPlanExprHtml(expr) {
+  function formatPlanExprHtml(expr, layout) {
     const raw = String(expr || '').trim();
     if (!raw) return '';
-    const lined = splitPlanLogicalLines(raw);
+    let lined = splitPlanLogicalLines(raw);
+    if (layout === 'columns') {
+      lined = splitCommasOutsideParens(lined);
+    }
     const { text, refs } = simplifyPathRefs(lined);
     const refByToken = {};
     for (const r of refs) refByToken[r.token] = r;
@@ -999,6 +1139,54 @@
     return base.slice(0, maxLen - 1) + '…';
   }
 
+  function truncateDiagramText(text, maxLen) {
+    const t = String(text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!t) return '';
+    if (t.length <= maxLen) return t;
+    return t.slice(0, maxLen - 1) + '…';
+  }
+
+  function isTableAccessOp(physicalOp) {
+    return /^(Clustered Index|Index|Table) (Scan|Seek)$/i.test(String(physicalOp || '').trim());
+  }
+
+  function formatPlanNodeDiagramSubtitle(node) {
+    if (!node) return '';
+    const physical = node.physicalOp || '';
+    const logical = node.logicalOp || '';
+
+    if (isTableAccessOp(physical)) return '';
+
+    if (physical === 'Filter' && node.predicate) {
+      return truncateDiagramText(node.predicate, 34);
+    }
+    if (physical === 'Sort' && node.orderBy) {
+      return truncateDiagramText(node.orderBy, 34);
+    }
+    if (
+      (physical === 'Stream Aggregate' || (physical === 'Hash Match' && /Aggregate/i.test(logical))) &&
+      node.groupBy
+    ) {
+      return truncateDiagramText(node.groupBy, 34);
+    }
+    if (/Match|Join|Loops|Adaptive Join/i.test(physical)) {
+      if (logical && logical !== physical) return logical;
+    }
+    if (physical === 'Parallelism') {
+      const bits = [];
+      if (node.partitioningType) bits.push(node.partitioningType);
+      if (logical && logical !== physical) bits.push(logical);
+      return bits.join(' · ');
+    }
+    if (physical === 'Compute Scalar' && node.outputList && node.outputList.length) {
+      return truncateDiagramText(node.outputList.slice(0, 2).join(', '), 34);
+    }
+    if (logical && logical !== physical) return logical;
+    return '';
+  }
+
   function buildPlanMetricGroups(node) {
     const groups = [];
 
@@ -1023,15 +1211,15 @@
       let tableLine = formatPlanObjectTable(obj);
       if (obj.alias && obj.alias !== obj.table) tableLine += ' as [' + obj.alias + ']';
       pushMetricCell(objCells, 'Tabela', tableLine, 'primary');
-      if (objCells.length) objCells[objCells.length - 1].wide = true;
       const idx = formatPlanObjectIndex(obj);
       if (idx) {
         const idxLabel =
           obj.indexKind && /cluster/i.test(obj.indexKind) ? 'Índice clustered' : 'Índice';
         pushMetricCell(objCells, idxLabel, idx, null);
-        objCells[objCells.length - 1].wide = true;
       }
-      if (objCells.length) groups.push({ id: 'object', title: 'Objeto', cells: objCells });
+      if (objCells.length) {
+        groups.push({ id: 'object', title: 'Objeto', cells: objCells, layout: 'inline' });
+      }
     }
 
     const rowCells = [];
@@ -1138,7 +1326,8 @@
       sections.push({
         title: 'Output List',
         content: node.outputList.join(', '),
-        variant: 'code'
+        variant: 'code',
+        layout: 'columns'
       });
     }
 
@@ -1170,6 +1359,12 @@
   SqlHelp.parseShowPlanXml = parseShowPlanXml;
   SqlHelp.highlightPlanSql = highlightPlanSql;
   SqlHelp.formatPlanExprHtml = formatPlanExprHtml;
+  function planNodeDiagramShowsObject(node) {
+    return isTableAccessOp(node && node.physicalOp) && node.objectRef && node.objectRef.table;
+  }
+
+  SqlHelp.planNodeDiagramShowsObject = planNodeDiagramShowsObject;
+  SqlHelp.formatPlanNodeDiagramSubtitle = formatPlanNodeDiagramSubtitle;
   SqlHelp.formatPlanObjectTable = formatPlanObjectTable;
   SqlHelp.formatPlanObjectIndex = formatPlanObjectIndex;
   SqlHelp.getNodeAlertCount = getNodeAlertCount;

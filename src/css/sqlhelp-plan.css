@@ -281,16 +281,15 @@
   pointer-events: none;
 }
 
-.plan-node-cost-badge {
-  font-size: 13px;
-  font-weight: 700;
-  fill: #0d6efd;
-}
-
 .plan-node-op-text {
   font-size: 11px;
   font-weight: 600;
   fill: var(--text-main);
+}
+
+.plan-node-subtitle-text {
+  font-size: 9.5px;
+  fill: var(--text-muted);
 }
 
 .plan-node-table-text {
@@ -301,6 +300,12 @@
 .plan-node-index-text {
   font-size: 9px;
   fill: var(--text-muted);
+}
+
+.plan-node-cost-badge {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #0d6efd;
 }
 
 .plan-node-rows-text {
@@ -479,6 +484,18 @@
 
 .plan-metric-group--highlight {
   border-color: rgba(253, 126, 20, 0.45);
+}
+
+.plan-metric-group--inline .plan-metric-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  overflow-x: auto;
+}
+
+.plan-metric-group--inline .plan-metric-cell {
+  flex: 1 1 0;
+  min-width: 5.5rem;
 }
 
 .plan-metric-group-title {

@@ -46,7 +46,7 @@
             <image v-if="planUi.operatorIconUrl(n.data)"
                    class="plan-node-op-icon"
                    :href="planUi.operatorIconUrl(n.data)"
-                   x="8" y="10" width="28" height="28"
+                   x="8" y="8" width="24" height="24"
                    @error="planUi.onOperatorIconError($event, n.data)"/>
             <g v-if="planUi.nodeAlertCount(n.data) > 0"
                class="plan-node-alert-badge"
@@ -57,23 +57,28 @@
                 {{ planUi.nodeAlertCount(n.data) > 9 ? '9+' : planUi.nodeAlertCount(n.data) }}
               </text>
             </g>
-            <text class="plan-node-cost-badge" :x="n.w/2" y="16" text-anchor="middle">
+            <text class="plan-node-cost-badge"
+                  :x="n.w - 10" y="22" text-anchor="end">
               {{ planUi.formatPct(n.data.costPercent) }}
             </text>
-            <text class="plan-node-op-text" x="44" y="36" text-anchor="start">
-              {{ truncate(n.data.physicalOp, 22) }}
+            <text class="plan-node-op-text" x="38" y="22" text-anchor="start">
+              {{ truncate(n.data.physicalOp, 20) }}
             </text>
-            <text v-if="n.data.objectRef && n.data.objectRef.table"
-                  class="plan-node-table-text" x="44"
-                  :y="n.data.objectRef.index ? 52 : 54" text-anchor="start">
-              {{ truncate(planUi.formatPlanObjectTable(n.data.objectRef), 24) }}
+            <template v-if="planUi.nodeDiagramShowsObject(n.data)">
+              <text class="plan-node-table-text" x="10" y="42" text-anchor="start">
+                {{ truncate(planUi.formatPlanObjectTable(n.data.objectRef), 30) }}
+              </text>
+              <text v-if="n.data.objectRef && n.data.objectRef.index"
+                    class="plan-node-index-text" x="10" y="56" text-anchor="start">
+                {{ truncate(planUi.formatPlanObjectIndex(n.data.objectRef), 30) }}
+              </text>
+            </template>
+            <text v-else-if="planUi.nodeDiagramSubtitle(n.data)"
+                  class="plan-node-subtitle-text" x="10" y="44" text-anchor="start">
+              {{ truncate(planUi.nodeDiagramSubtitle(n.data), 30) }}
             </text>
-            <text v-if="n.data.objectRef && n.data.objectRef.index"
-                  class="plan-node-index-text" x="44" y="66" text-anchor="start">
-              {{ truncate(planUi.formatPlanObjectIndex(n.data.objectRef), 24) }}
-            </text>
-            <text class="plan-node-rows-text" x="44"
-                  :y="n.data.objectRef && n.data.objectRef.index ? 84 : (n.data.objectRef && n.data.objectRef.table ? 72 : 82)"
+            <text class="plan-node-rows-text" x="10"
+                  :y="planUi.nodeDiagramShowsObject(n.data) && n.data.objectRef && n.data.objectRef.index ? 74 : 68"
                   text-anchor="start">
               est {{ planUi.formatPlanRows(n.data.estimateRows) }}
               <tspan v-if="n.data.actualRows != null"> · act {{ planUi.formatPlanRows(n.data.actualRows) }}</tspan>
@@ -101,6 +106,8 @@
           formatPlanRows: (n) => this.formatPlanRows(n),
           formatPlanObjectTable: (obj) => S.formatPlanObjectTable(obj),
           formatPlanObjectIndex: (obj) => S.formatPlanObjectIndex(obj),
+          nodeDiagramSubtitle: (node) => S.formatPlanNodeDiagramSubtitle(node),
+          nodeDiagramShowsObject: (node) => S.planNodeDiagramShowsObject(node),
           nodeVisualClass: (node) => S.planNodeVisualClass(node),
           nodeAlertCount: (node) => {
             const st = this.selectedStatement;
@@ -272,8 +279,8 @@
         if (!Number.isFinite(v)) return '—';
         return v.toFixed(1) + '%';
       },
-      formatPlanExprHtml(content) {
-        return S.formatPlanExprHtml(content);
+      formatPlanExprHtml(content, layout) {
+        return S.formatPlanExprHtml(content, layout);
       },
       rowClass(stmt) {
         if (stmt.rowMismatch === 'high') return 'plan-row-mismatch-high';

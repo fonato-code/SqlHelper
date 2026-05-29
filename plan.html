@@ -517,7 +517,10 @@
                  class="plan-node-metrics mb-3">
               <div v-for="grp in planNodeDetail.metricGroups" :key="grp.id"
                    class="plan-metric-group"
-                   :class="{ 'plan-metric-group--highlight': grp.highlight }">
+                   :class="{
+                     'plan-metric-group--highlight': grp.highlight,
+                     'plan-metric-group--inline': grp.layout === 'inline'
+                   }">
                 <div class="plan-metric-group-title">{{ grp.title }}</div>
                 <div class="plan-metric-grid">
                   <div v-for="cell in grp.cells" :key="cell.label"
@@ -538,7 +541,7 @@
               <h6 class="fw-semibold mb-2">{{ sec.title }}</h6>
               <pre v-if="sec.variant === 'code'"
                    class="plan-node-expr plan-node-expr--code mb-0"
-                   v-html="formatPlanExprHtml(sec.content)"></pre>
+                   v-html="formatPlanExprHtml(sec.content, sec.layout)"></pre>
               <p v-else class="mb-0 small">{{ sec.content }}</p>
             </template>
           </div>
