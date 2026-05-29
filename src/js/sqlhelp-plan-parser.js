@@ -390,9 +390,11 @@
     return null;
   }
 
-  function flattenPlan(node, list) {
+  function flattenPlan(node, list, depth) {
+    const d = depth == null ? 0 : depth;
+    node.depth = d;
     list.push(node);
-    for (const c of node.children) flattenPlan(c, list);
+    for (const c of node.children) flattenPlan(c, list, d + 1);
   }
 
   function collectTableIo(nodes) {

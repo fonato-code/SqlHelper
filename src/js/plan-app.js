@@ -527,6 +527,32 @@
         if (severity === 'warning') return 'fa-exclamation-triangle text-warning';
         return 'fa-info-circle text-info';
       },
+      formatMissingIndexDdl(mi) {
+        if (!mi) return '';
+        const keyCols = (mi.columns.equality || [])
+          .concat(mi.columns.inequality || [])
+          .map((c) => '[' + c + ']');
+        if (!keyCols.length) return '-- Sem colunas-chave no plano';
+        const schema = mi.schema ? '[' + mi.schema + ']' : mi.schema;
+        const table = mi.table ? '[' + mi.table + ']' : mi.table;
+        let ddl =
+          'CREATE NONCLUSTERED INDEX IX_' +
+          (mi.table || 'Missing').replace(/[^\w]/g, '_') +
+          '_Missing\nON ' +
+          schema +
+          '.' +
+          table +
+          ' (' +
+          keyCols.join(', ') +
+          ')';
+        if (mi.columns.include && mi.columns.include.length) {
+          ddl +=
+            '\nINCLUDE (' +
+            mi.columns.include.map((c) => '[' + c + ']').join(', ') +
+            ')';
+        }
+        return ddl + ';';
+      },
       operatorIconUrl(node) {
         if (!node) return '';
         const meta =

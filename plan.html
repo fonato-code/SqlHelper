@@ -187,21 +187,6 @@
           <div class="card-body">
             <pre class="plan-sql-view mb-3" v-html="highlightedSql"></pre>
 
-            <div v-if="selectedStatement.missingIndexes.length" class="mb-3">
-              <h6 class="text-muted"><i class="fal fa-database me-1"></i> Índices sugeridos</h6>
-              <div v-for="(mi, i) in selectedStatement.missingIndexes" :key="i" class="mb-2">
-                <div class="small">
-                  <strong>{{ mi.database }}.{{ mi.schema }}.{{ mi.table }}</strong>
-                  — impacto {{ mi.impact != null ? mi.impact.toFixed(2) : '?' }}%
-                </div>
-                <div class="plan-missing-ddl text-muted">
-CREATE NONCLUSTERED INDEX IX_{{ mi.table }}_Missing
-ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.inequality).join(', ') }})
-{{ mi.columns.include.length ? 'INCLUDE (' + mi.columns.include.join(', ') + ')' : '' }};
-                </div>
-              </div>
-            </div>
-
             <ul class="nav nav-tabs mb-3">
               <li class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: planTab === 'diagram' }" @click="planTab = 'diagram'">
@@ -221,6 +206,17 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
               <li class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: planTab === 'io' }" @click="planTab = 'io'">
                   Table I/O
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'indexes' }" @click="planTab = 'indexes'">
+                  Índices sugeridos
+                  <span v-if="selectedStatement.missingIndexes.length"
+                        class="plan-index-count-badge ms-1"
+                        :title="selectedStatement.missingIndexes.length + ' índice(s) sugerido(s)'">
+                    <i class="fal fa-database"></i>
+                    <span>{{ selectedStatement.missingIndexes.length }}</span>
+                  </span>
                 </button>
               </li>
               <li class="nav-item">
@@ -312,14 +308,16 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
               <div v-for="op in selectedStatement.flatOps" :key="op.nodeId"
                    class="plan-tree-item"
                    :class="{ 'plan-tree-hot': (op.costPercent || 0) >= 20 }"
-                   :style="{ paddingLeft: (Number(op.nodeId) * 12 + 8) + 'px' }">
-                <span class="text-muted">[{{ op.nodeId }}]</span>
-                <strong>{{ op.physicalOp }}</strong>
-                <span v-if="op.objectRef?.table"> — {{ op.objectRef.table }}</span>
-                <span class="text-primary"> · {{ formatPct(op.costPercent) }}</span>
-                <span class="text-muted"> · est {{ formatInt(op.estimateRows) }}</span>
-                <span v-if="op.actualRows != null" :class="op.rowMismatch ? 'text-danger' : 'text-muted'">
-                  · actual {{ formatInt(op.actualRows) }}
+                   :style="{ '--plan-tree-depth': op.depth != null ? op.depth : 0 }">
+                <span class="plan-tree-id">[{{ op.nodeId }}]</span>
+                <span class="plan-tree-op">{{ op.physicalOp }}</span>
+                <span v-if="op.objectRef?.table" class="plan-tree-obj"> — {{ op.objectRef.table }}</span>
+                <span class="plan-tree-meta plan-tree-cost">{{ formatPct(op.costPercent) }}</span>
+                <span class="plan-tree-meta">est {{ formatInt(op.estimateRows) }}</span>
+                <span v-if="op.actualRows != null"
+                      class="plan-tree-meta"
+                      :class="op.rowMismatch ? 'plan-tree-actual-bad' : ''">
+                  actual {{ formatInt(op.actualRows) }}
                 </span>
               </div>
             </div>
@@ -378,6 +376,40 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <div v-show="planTab === 'indexes'" class="plan-missing-indexes-list">
+              <div v-if="selectedStatement.missingIndexes.length">
+                <div v-for="(mi, i) in selectedStatement.missingIndexes" :key="'mi-' + i"
+                     class="plan-missing-index-card mb-3">
+                  <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <strong class="plan-missing-index-table">
+                      [{{ mi.database }}].[{{ mi.schema }}].[{{ mi.table }}]
+                    </strong>
+                    <span v-if="mi.impact != null" class="badge plan-missing-impact-badge">
+                      Impacto {{ mi.impact.toFixed(2) }}%
+                    </span>
+                  </div>
+                  <div class="plan-missing-cols small mb-2">
+                    <span v-if="mi.columns.equality.length" class="plan-missing-col-group">
+                      <span class="plan-missing-col-label">Igualdade</span>
+                      {{ mi.columns.equality.join(', ') }}
+                    </span>
+                    <span v-if="mi.columns.inequality.length" class="plan-missing-col-group">
+                      <span class="plan-missing-col-label">Desigualdade</span>
+                      {{ mi.columns.inequality.join(', ') }}
+                    </span>
+                    <span v-if="mi.columns.include.length" class="plan-missing-col-group">
+                      <span class="plan-missing-col-label">INCLUDE</span>
+                      {{ mi.columns.include.join(', ') }}
+                    </span>
+                  </div>
+                  <pre class="plan-missing-ddl mb-0">{{ formatMissingIndexDdl(mi) }}</pre>
+                </div>
+              </div>
+              <p v-else class="text-muted small mb-0 py-3 text-center">
+                <i class="fal fa-check-circle me-1"></i> Nenhum índice sugerido para este statement.
+              </p>
             </div>
 
             <div v-show="planTab === 'alerts'" class="plan-alerts-list">
