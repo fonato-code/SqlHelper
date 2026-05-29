@@ -2,8 +2,8 @@
   'use strict';
   var SqlHelp = global.SqlHelp = global.SqlHelp || {};
 
-  const NODE_W = 200;
-  const NODE_H = 100;
+  const NODE_W = 220;
+  const NODE_H = 108;
   const ARROW_INSET = 6;
   const H_GAP = 64;
   const V_GAP = 18;

@@ -41,8 +41,13 @@
              :transform="'translate(' + n.x + ',' + n.y + ')'"
              :class="planUi.nodeVisualClass(n.data)"
              :data-node-id="n.id"
-             title="Duplo clique para ver detalhes">
+             :title="planUi.nodeGroupTitle(n.data)">
             <rect class="plan-node-rect" :width="n.w" :height="n.h" rx="4"/>
+            <image v-if="planUi.operatorIconUrl(n.data)"
+                   class="plan-node-op-icon"
+                   :href="planUi.operatorIconUrl(n.data)"
+                   x="8" y="10" width="28" height="28"
+                   @error="planUi.onOperatorIconError($event, n.data)"/>
             <g v-if="planUi.nodeAlertCount(n.data) > 0"
                class="plan-node-alert-badge"
                :transform="'translate(' + (n.w - 20) + ', 2)'"
@@ -55,21 +60,21 @@
             <text class="plan-node-cost-badge" :x="n.w/2" y="16" text-anchor="middle">
               {{ planUi.formatPct(n.data.costPercent) }}
             </text>
-            <text class="plan-node-op-text" :x="n.w/2" y="34" text-anchor="middle">
-              {{ truncate(n.data.physicalOp, 24) }}
+            <text class="plan-node-op-text" x="44" y="36" text-anchor="start">
+              {{ truncate(n.data.physicalOp, 22) }}
             </text>
             <text v-if="n.data.objectRef && n.data.objectRef.table"
-                  class="plan-node-table-text" :x="n.w/2"
-                  :y="n.data.objectRef.index ? 50 : 52" text-anchor="middle">
-              {{ truncate(planUi.formatPlanObjectTable(n.data.objectRef), 26) }}
+                  class="plan-node-table-text" x="44"
+                  :y="n.data.objectRef.index ? 52 : 54" text-anchor="start">
+              {{ truncate(planUi.formatPlanObjectTable(n.data.objectRef), 24) }}
             </text>
             <text v-if="n.data.objectRef && n.data.objectRef.index"
-                  class="plan-node-index-text" :x="n.w/2" y="63" text-anchor="middle">
-              {{ truncate(planUi.formatPlanObjectIndex(n.data.objectRef), 26) }}
+                  class="plan-node-index-text" x="44" y="66" text-anchor="start">
+              {{ truncate(planUi.formatPlanObjectIndex(n.data.objectRef), 24) }}
             </text>
-            <text class="plan-node-rows-text" :x="n.w/2"
-                  :y="n.data.objectRef && n.data.objectRef.index ? 80 : (n.data.objectRef && n.data.objectRef.table ? 68 : 78)"
-                  text-anchor="middle">
+            <text class="plan-node-rows-text" x="44"
+                  :y="n.data.objectRef && n.data.objectRef.index ? 84 : (n.data.objectRef && n.data.objectRef.table ? 72 : 82)"
+                  text-anchor="start">
               est {{ planUi.formatPlanRows(n.data.estimateRows) }}
               <tspan v-if="n.data.actualRows != null"> · act {{ planUi.formatPlanRows(n.data.actualRows) }}</tspan>
             </text>
@@ -101,6 +106,9 @@
             const st = this.selectedStatement;
             return S.getNodeAlertCount(node, st ? st.issues : []);
           },
+          operatorIconUrl: (node) => this.operatorIconUrl(node),
+          onOperatorIconError: (ev, node) => this.onOperatorIconError(ev, node),
+          nodeGroupTitle: (node) => this.nodeGroupTitle(node),
           onNodeDblClick: (node) => this.openPlanNodeModal(node)
         }
       };
@@ -518,6 +526,34 @@
         if (severity === 'danger') return 'fa-exclamation-circle text-danger';
         if (severity === 'warning') return 'fa-exclamation-triangle text-warning';
         return 'fa-info-circle text-info';
+      },
+      operatorIconUrl(node) {
+        if (!node) return '';
+        const meta =
+          node.operatorMeta ||
+          (S.getPlanOperatorMeta
+            ? S.getPlanOperatorMeta(node.physicalOp, node.logicalOp)
+            : null);
+        return meta ? meta.iconUrl : '';
+      },
+      onOperatorIconError(ev, node) {
+        const img = ev && ev.target;
+        if (!img || img.dataset.fallback) return;
+        img.dataset.fallback = '1';
+        const meta =
+          node.operatorMeta ||
+          (S.getPlanOperatorMeta
+            ? S.getPlanOperatorMeta(node.physicalOp, node.logicalOp)
+            : null);
+        img.setAttribute(
+          'href',
+          S.planOperatorIconFallback ? S.planOperatorIconFallback(meta) : ''
+        );
+      },
+      nodeGroupTitle(node) {
+        let t = 'Duplo clique para ver detalhes';
+        if (node && node.parallel) t += ' · Executado em paralelo';
+        return t;
       },
       openPlanNodeModal(node) {
         if (!node) return;

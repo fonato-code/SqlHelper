@@ -53,6 +53,10 @@
             No SSMS: clique com o botão direito no plano gráfico → <strong>Salvar Plano de Execução Como...</strong>
             (<code>.sqlplan</code>) ou exiba o plano em XML e salve/cole aqui.
             Planos com estatísticas reais (actual execution plan) permitem comparar linhas estimadas vs. reais.
+            Ícones dos operadores vêm da
+            <a href="https://learn.microsoft.com/pt-br/sql/relational-databases/showplan-logical-and-physical-operators-reference?view=sql-server-ver17"
+               target="_blank" rel="noopener">referência Microsoft Learn</a>
+            (requer conexão com a internet).
           </p>
           <div class="d-flex flex-wrap gap-2 mb-3">
             <label class="btn btn-primary mb-0">
@@ -254,9 +258,15 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
                   <i class="fal" :class="diagramFullscreen ? 'fa-compress' : 'fa-expand'"></i>
                   <span class="ms-1 d-none d-sm-inline">{{ diagramFullscreen ? 'Sair' : 'Tela cheia' }}</span>
                 </button>
-                <span class="small text-muted ms-auto">
-                  <span class="d-none d-md-inline">Scroll = zoom · Arrastar = mover · Duplo clique no nó = detalhes · Botão direito = opções ·</span>
-                  Custo: <strong>{{ diagramCostModeLabel }}</strong>
+                <span class="small text-muted ms-auto d-flex flex-wrap align-items-center gap-2">
+                  <a href="https://learn.microsoft.com/pt-br/sql/relational-databases/showplan-logical-and-physical-operators-reference?view=sql-server-ver17"
+                     target="_blank" rel="noopener" class="text-muted text-decoration-none">
+                    <i class="fal fa-book-open me-1"></i>Sobre os operadores do plano
+                  </a>
+                  <span>
+                    <span class="d-none d-md-inline">Scroll = zoom · Arrastar = mover · Duplo clique no nó = detalhes · Botão direito = opções ·</span>
+                    Custo: <strong>{{ diagramCostModeLabel }}</strong>
+                  </span>
                 </span>
               </div>
               <div ref="diagramViewport"
@@ -391,33 +401,76 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
       <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content" v-if="planNodeDetail">
           <div class="modal-header">
-            <div>
-              <h5 class="modal-title" id="planNodeDetailModalLabel">{{ planNodeDetail.title }}</h5>
-              <p v-if="planNodeDetail.description" class="small text-muted mb-0 mt-1">
-                {{ planNodeDetail.description }}
-              </p>
+            <div class="d-flex gap-3 flex-grow-1 min-width-0">
+              <img v-if="planNodeDetail.iconUrl"
+                   class="plan-node-detail-icon flex-shrink-0"
+                   :src="planNodeDetail.iconUrl"
+                   width="32" height="32" alt=""
+                   @error="$event.target.style.display='none'">
+              <div class="min-width-0">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <h5 class="modal-title mb-0" id="planNodeDetailModalLabel">{{ planNodeDetail.title }}</h5>
+                  <a v-if="planNodeDetail.docUrl"
+                     :href="planNodeDetail.docUrl"
+                     target="_blank" rel="noopener"
+                     class="btn btn-sm btn-outline-primary py-0">
+                    <i class="fal fa-external-link me-1"></i>Documentação Microsoft
+                  </a>
+                </div>
+                <p v-if="planNodeDetail.headerDescription" class="small text-muted mb-0 mt-2 plan-node-detail-desc">
+                  {{ planNodeDetail.headerDescription }}
+                </p>
+              </div>
             </div>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"
+            <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="modal" aria-label="Fechar"
                     @click="closePlanNodeModal"></button>
           </div>
           <div class="modal-body plan-node-detail-modal">
-            <table class="table table-sm table-striped plan-node-detail-table mb-0">
-              <tbody>
-                <tr v-for="(prop, idx) in planNodeDetail.properties" :key="'p-' + idx">
-                  <th scope="row" class="plan-node-detail-label">{{ prop.label }}</th>
-                  <td>{{ prop.value }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div v-if="planNodeDetail.warnings && planNodeDetail.warnings.length"
+                 class="plan-node-warnings-block mb-3">
+              <h6 class="plan-node-warnings-title mb-2">
+                <i class="fal fa-exclamation-triangle me-1"></i>Warnings
+              </h6>
+              <ul class="plan-node-warnings-list mb-0">
+                <li v-for="(w, wi) in planNodeDetail.warnings" :key="'w-' + wi">{{ w }}</li>
+              </ul>
+            </div>
+
+            <div v-if="planNodeDetail.descriptionFull" class="plan-node-doc-section mb-3">
+              <h6 class="plan-node-section-title mb-2">Sobre o operador</h6>
+              <p class="plan-node-doc-text mb-0">{{ planNodeDetail.descriptionFull }}</p>
+            </div>
+            <div v-if="planNodeDetail.descriptionEn" class="plan-node-doc-section plan-node-doc-section--en mb-3">
+              <h6 class="plan-node-section-title mb-2">Texto original (EN)</h6>
+              <p class="plan-node-doc-text mb-0">{{ planNodeDetail.descriptionEn }}</p>
+            </div>
+
+            <div v-if="planNodeDetail.metricGroups && planNodeDetail.metricGroups.length"
+                 class="plan-node-metrics mb-3">
+              <div v-for="grp in planNodeDetail.metricGroups" :key="grp.id"
+                   class="plan-metric-group"
+                   :class="{ 'plan-metric-group--highlight': grp.highlight }">
+                <div class="plan-metric-group-title">{{ grp.title }}</div>
+                <div class="plan-metric-grid">
+                  <div v-for="cell in grp.cells" :key="cell.label"
+                       class="plan-metric-cell"
+                       :class="[
+                         cell.wide ? 'plan-metric-cell--wide' : '',
+                         cell.tone ? 'plan-metric-tone-' + cell.tone : ''
+                       ]">
+                    <span class="plan-metric-label">{{ cell.label }}</span>
+                    <span class="plan-metric-value">{{ cell.value }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <template v-for="(sec, idx) in planNodeDetail.sections" :key="'s-' + idx">
               <hr class="my-3">
-              <h6 class="fw-semibold mb-2"
-                  :class="{ 'text-danger': sec.variant === 'warning' }">{{ sec.title }}</h6>
+              <h6 class="fw-semibold mb-2">{{ sec.title }}</h6>
               <pre v-if="sec.variant === 'code'"
                    class="plan-node-expr plan-node-expr--code mb-0"
                    v-html="formatPlanExprHtml(sec.content)"></pre>
-              <pre v-else-if="sec.variant === 'warning'"
-                   class="plan-node-expr plan-node-expr--warning mb-0 text-danger">{{ sec.content }}</pre>
               <p v-else class="mb-0 small">{{ sec.content }}</p>
             </template>
           </div>
@@ -446,6 +499,9 @@ ON {{ mi.schema }}.{{ mi.table }} ({{ mi.columns.equality.concat(mi.columns.ineq
   <script src="src/js/highlight.min.js"></script>
   <script src="src/js/sqlhelp-ui.js"></script>
   <script src="src/js/sqlhelp-markdown.js"></script>
+  <script src="src/js/sqlhelp-plan-operators-catalog.js"></script>
+  <script src="src/js/sqlhelp-plan-operators-pt.js"></script>
+  <script src="src/js/sqlhelp-plan-operators.js"></script>
   <script src="src/js/sqlhelp-plan-parser.js"></script>
   <script src="src/js/sqlhelp-plan-diagram.js"></script>
   <script>

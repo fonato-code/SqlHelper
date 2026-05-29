@@ -53,23 +53,6 @@
     return has ? total : null;
   }
 
-  const PLAN_OP_DESCRIPTIONS = {
-    'Clustered Index Scan': 'Scans a clustered index, entirely or only a range.',
-    'Clustered Index Seek': 'Scans a particular range of rows from a clustered index.',
-    'Index Scan': 'Scans a nonclustered index, entirely or only a range.',
-    'Index Seek': 'Scans a particular range of rows from a nonclustered index.',
-    'Table Scan': 'Scans a table.',
-    Sort: 'Reorders the input.',
-    'Stream Aggregate': 'Computes summary values for groups of rows in a sorted stream.',
-    'Hash Match': 'Builds a hash table to match rows from two inputs.',
-    'Merge Join': 'Performs inner join, left outer join, right outer join, or full outer join.',
-    'Nested Loops': 'Performs inner joins, left outer joins, left semi joins, left anti semi joins, right outer joins, right semi joins, right anti semi joins, full outer joins, and cross joins.',
-    Parallelism: 'Consumes multiple input streams and produces multiple output streams.',
-    Filter: 'Removes rows that do not satisfy the predicate.',
-    'Compute Scalar': 'Evaluates an expression to produce a scalar value.',
-    Concatenation: 'Concatenates two or more input streams into a single output stream.'
-  };
-
   const WARNING_FLAG_LABELS = {
     NoJoinPredicate: 'Join sem predicado (CROSS JOIN implícito).',
     SpillToTempDb: 'Operação gerou spill para tempdb.',
@@ -366,6 +349,9 @@
     };
 
     node.children = childRelOps(relOpEl).map((c) => parseRelOp(c, statementCost));
+    if (SqlHelp.getPlanOperatorMeta) {
+      node.operatorMeta = SqlHelp.getPlanOperatorMeta(physicalOp, logicalOp);
+    }
     return node;
   }
 
@@ -730,18 +716,14 @@
     return escaped.replace(keywords, '<span class="sql-kw">$1</span>');
   }
 
-  function injectRefSpans(html, refs) {
-    let out = html;
-    for (const r of refs) {
-      const span =
-        '<span class="plan-expr-ref" title="' +
-        escapeAttr(r.title) +
-        '">' +
-        escapeHtml(r.display) +
-        '</span>';
-      out = out.split(r.token).join(span);
-    }
-    return out;
+  function refSpanHtml(ref) {
+    return (
+      '<span class="plan-expr-ref" title="' +
+      escapeAttr(ref.title) +
+      '">' +
+      escapeHtml(ref.display) +
+      '</span>'
+    );
   }
 
   function formatPlanExprHtml(expr) {
@@ -749,8 +731,20 @@
     if (!raw) return '';
     const lined = splitPlanLogicalLines(raw);
     const { text, refs } = simplifyPathRefs(lined);
-    let html = highlightExprCode(text);
-    html = injectRefSpans(html, refs);
+    const refByToken = {};
+    for (const r of refs) refByToken[r.token] = r;
+
+    const parts = text.split(/(@@PLANREF\d+@@)/g);
+    let html = '';
+    for (const part of parts) {
+      if (!part) continue;
+      const ref = refByToken[part];
+      if (ref) {
+        html += refSpanHtml(ref);
+      } else {
+        html += highlightExprCode(part);
+      }
+    }
     return '<code class="hljs language-sql">' + html + '</code>';
   }
 
@@ -922,68 +916,136 @@
     if (value != null && value !== '' && value !== '—') list.push({ label, value });
   }
 
-  function buildPlanNodeDetail(node, statementIssues) {
-    if (!node) return null;
-    const title = node.physicalOp || node.logicalOp || 'Operador';
-    const description = PLAN_OP_DESCRIPTIONS[node.physicalOp] || PLAN_OP_DESCRIPTIONS[node.logicalOp] || '';
-    const properties = [];
+  function pushMetricCell(list, label, value, tone) {
+    if (value == null || value === '' || value === '—') return;
+    list.push({ label, value: String(value), tone: tone || null });
+  }
 
-    pushDetailProp(properties, 'Node ID', node.nodeId);
-    pushDetailProp(properties, 'Physical Operation', node.physicalOp);
-    pushDetailProp(properties, 'Logical Operation', node.logicalOp);
-    pushDetailProp(properties, 'Execution Mode', node.estimatedExecutionMode);
-    pushDetailProp(properties, 'Partitioning Type', node.partitioningType);
-    pushDetailProp(properties, 'Actual Rows', formatPlanNumber(node.actualRows, 0));
-    pushDetailProp(properties, 'Actual Rows Read', formatPlanNumber(node.actualRowsRead, 0));
-    pushDetailProp(properties, 'Estimated Rows', formatPlanNumber(node.estimateRows, 0));
-    pushDetailProp(
-      properties,
-      'Estimated Rows To Be Read',
-      formatPlanNumber(node.estimateRowsRead, 0)
-    );
-    pushDetailProp(properties, 'Actual Executions', formatPlanNumber(node.actualExecutions, 0));
-    pushDetailProp(properties, 'Estimated I/O Cost', formatPlanCost(node.estimateIo));
-    pushDetailProp(properties, 'Estimated CPU Cost', formatPlanCost(node.estimateCpu));
-    const opCost = formatPlanCost(node.estimateOperatorCost);
-    if (opCost != null) {
-      const pct = Number(node.costPercent);
-      const pctStr = Number.isFinite(pct) ? ' (' + pct.toFixed(1).replace('.', ',') + '%)' : '';
-      pushDetailProp(properties, 'Estimated Operator Cost', opCost + pctStr);
+  function shortHeaderDescription(text, maxLen) {
+    if (!text) return '';
+    const clean = String(text).trim();
+    const first = clean.split(/(?<=[.!?])\s+/)[0] || clean;
+    const base = first.length <= maxLen ? first : clean;
+    if (base.length <= maxLen) return base;
+    return base.slice(0, maxLen - 1) + '…';
+  }
+
+  function buildPlanMetricGroups(node) {
+    const groups = [];
+
+    const opCells = [];
+    pushMetricCell(opCells, 'Nó', node.nodeId, null);
+    pushMetricCell(opCells, 'Físico', node.physicalOp, 'primary');
+    if (node.logicalOp && node.logicalOp !== node.physicalOp) {
+      pushMetricCell(opCells, 'Lógico', node.logicalOp, null);
     }
-    pushDetailProp(properties, 'Estimated Subtree Cost', formatPlanCost(node.subtreeCost));
-    pushDetailProp(properties, 'Estimated Row Size', node.avgRowSize != null ? node.avgRowSize + ' B' : null);
-    pushDetailProp(
-      properties,
-      'Actual Data Size',
-      formatPlanBytes(estimateDataSizeBytes(node.actualRows, node.avgRowSize))
-    );
-    pushDetailProp(
-      properties,
-      'Estimated Data Size',
-      formatPlanBytes(estimateDataSizeBytes(node.estimateRows, node.avgRowSize))
-    );
-    pushDetailProp(properties, 'Actual Rebinds', formatPlanNumber(node.actualRebinds, 0));
-    pushDetailProp(properties, 'Actual Rewinds', formatPlanNumber(node.actualRewinds, 0));
-    pushDetailProp(properties, 'Estimated Rebinds', formatPlanNumber(node.estimateRebinds, 1));
-    pushDetailProp(properties, 'Estimated Rewinds', formatPlanNumber(node.estimateRewinds, 1));
+    pushMetricCell(opCells, 'Modo', node.estimatedExecutionMode, null);
+    pushMetricCell(opCells, 'Partição', node.partitioningType, null);
+    if (node.parallel) pushMetricCell(opCells, 'Paralelo', 'Sim', 'accent');
     if (node.ordered != null) {
-      pushDetailProp(properties, 'Ordered', node.ordered ? 'True' : 'False');
+      pushMetricCell(opCells, 'Ordenado', node.ordered ? 'Sim' : 'Não', null);
     }
+    if (opCells.length) groups.push({ id: 'op', title: 'Operador', cells: opCells });
 
-    const sections = [];
     const obj = node.objectRef;
     if (obj && (obj.database || obj.table)) {
-      if (obj.database) pushDetailProp(properties, 'Database', '[' + obj.database + ']');
+      const objCells = [];
+      if (obj.database) pushMetricCell(objCells, 'Banco', '[' + obj.database + ']', null);
       let tableLine = formatPlanObjectTable(obj);
       if (obj.alias && obj.alias !== obj.table) tableLine += ' as [' + obj.alias + ']';
-      pushDetailProp(properties, 'Table', tableLine);
+      pushMetricCell(objCells, 'Tabela', tableLine, 'primary');
+      if (objCells.length) objCells[objCells.length - 1].wide = true;
       const idx = formatPlanObjectIndex(obj);
       if (idx) {
         const idxLabel =
-          obj.indexKind && /cluster/i.test(obj.indexKind) ? 'Clustered Index' : 'Index';
-        pushDetailProp(properties, idxLabel, idx);
+          obj.indexKind && /cluster/i.test(obj.indexKind) ? 'Índice clustered' : 'Índice';
+        pushMetricCell(objCells, idxLabel, idx, null);
+        objCells[objCells.length - 1].wide = true;
       }
+      if (objCells.length) groups.push({ id: 'object', title: 'Objeto', cells: objCells });
     }
+
+    const rowCells = [];
+    const estRows = formatPlanNumber(node.estimateRows, 0);
+    const actRows = formatPlanNumber(node.actualRows, 0);
+    const rowTone =
+      node.rowMismatch === 'high' ? 'danger' : node.rowMismatch === 'medium' ? 'warn' : null;
+    pushMetricCell(rowCells, 'Linhas est.', estRows, 'muted');
+    if (actRows != null) pushMetricCell(rowCells, 'Linhas reais', actRows, rowTone || 'ok');
+    pushMetricCell(rowCells, 'Lidas (est.)', formatPlanNumber(node.estimateRowsRead, 0), 'muted');
+    pushMetricCell(rowCells, 'Lidas (real)', formatPlanNumber(node.actualRowsRead, 0), null);
+    pushMetricCell(rowCells, 'Execuções', formatPlanNumber(node.actualExecutions, 0), null);
+    if (rowCells.length) {
+      groups.push({ id: 'rows', title: 'Linhas', cells: rowCells, highlight: rowTone });
+    }
+
+    const costCells = [];
+    const pct = Number(node.costPercent);
+    const costTone = pct >= 30 ? 'danger' : pct >= 10 ? 'warn' : null;
+    pushMetricCell(costCells, 'I/O est.', formatPlanCost(node.estimateIo), 'muted');
+    pushMetricCell(costCells, 'CPU est.', formatPlanCost(node.estimateCpu), 'muted');
+    const opCost = formatPlanCost(node.estimateOperatorCost);
+    if (opCost != null) {
+      const pctStr = Number.isFinite(pct) ? ' · ' + pct.toFixed(1).replace('.', ',') + '%' : '';
+      pushMetricCell(costCells, 'Custo operador', opCost + pctStr, costTone);
+    }
+    pushMetricCell(costCells, 'Custo subárvore', formatPlanCost(node.subtreeCost), costTone);
+    if (costCells.length) groups.push({ id: 'cost', title: 'Custo', cells: costCells, highlight: costTone });
+
+    const sizeCells = [];
+    pushMetricCell(
+      sizeCells,
+      'Tam. linha est.',
+      node.avgRowSize != null ? node.avgRowSize + ' B' : null,
+      'muted'
+    );
+    pushMetricCell(
+      sizeCells,
+      'Dados reais',
+      formatPlanBytes(estimateDataSizeBytes(node.actualRows, node.avgRowSize)),
+      null
+    );
+    pushMetricCell(
+      sizeCells,
+      'Dados est.',
+      formatPlanBytes(estimateDataSizeBytes(node.estimateRows, node.avgRowSize)),
+      'muted'
+    );
+    if (sizeCells.length) groups.push({ id: 'size', title: 'Tamanho', cells: sizeCells });
+
+    const rebindCells = [];
+    pushMetricCell(rebindCells, 'Rebinds (real)', formatPlanNumber(node.actualRebinds, 0), null);
+    pushMetricCell(rebindCells, 'Rewinds (real)', formatPlanNumber(node.actualRewinds, 0), null);
+    pushMetricCell(rebindCells, 'Rebinds (est.)', formatPlanNumber(node.estimateRebinds, 1), 'muted');
+    pushMetricCell(rebindCells, 'Rewinds (est.)', formatPlanNumber(node.estimateRewinds, 1), 'muted');
+    const showRebinds =
+      (node.actualRebinds != null && node.actualRebinds > 0) ||
+      (node.actualRewinds != null && node.actualRewinds > 0) ||
+      (node.estimateRebinds != null && node.estimateRebinds !== 1) ||
+      (node.estimateRewinds != null && node.estimateRewinds !== 1);
+    if (showRebinds && rebindCells.length) {
+      groups.push({ id: 'rebinds', title: 'Rebinds / Rewinds', cells: rebindCells });
+    }
+
+    return groups;
+  }
+
+  function buildPlanNodeDetail(node, statementIssues) {
+    if (!node) return null;
+    const meta =
+      node.operatorMeta ||
+      (SqlHelp.getPlanOperatorMeta
+        ? SqlHelp.getPlanOperatorMeta(node.physicalOp, node.logicalOp)
+        : null);
+    const title = node.physicalOp || node.logicalOp || (meta && meta.name) || 'Operador';
+    const descriptionFull = meta ? meta.description : '';
+    const descriptionEn = meta ? meta.descriptionEn : '';
+    const headerDescription = shortHeaderDescription(descriptionFull, 140);
+    const showDescriptionInBody = descriptionFull.length > 140;
+    const warnings = getNodeAlertMessages(node, statementIssues);
+    const metricGroups = buildPlanMetricGroups(node);
+
+    const sections = [];
 
     if (node.predicate) {
       sections.push({ title: 'Predicate', content: node.predicate, variant: 'code' });
@@ -1011,16 +1073,22 @@
       });
     }
 
-    const alertMsgs = getNodeAlertMessages(node, statementIssues);
-    if (alertMsgs.length) {
-      sections.push({
-        title: 'Warnings',
-        content: alertMsgs.join('\n'),
-        variant: 'warning'
-      });
-    }
-
-    return { title, description, properties, sections };
+    return {
+      title,
+      headerDescription,
+      descriptionFull: showDescriptionInBody ? descriptionFull : '',
+      descriptionEn:
+        descriptionEn && descriptionEn.trim() && descriptionEn !== descriptionFull
+          ? descriptionEn
+          : '',
+      docUrl: meta ? meta.docUrl : SqlHelp.PLAN_OPERATORS_DOC_URL || '',
+      iconUrl: meta ? meta.iconUrl : '',
+      operatorKind: meta ? meta.operatorKind : '',
+      operatorMeta: meta,
+      warnings,
+      metricGroups,
+      sections
+    };
   }
 
   SqlHelp.parseShowPlanXml = parseShowPlanXml;

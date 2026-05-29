@@ -1,0 +1,679 @@
+{
+  "generatedAt": "2026-05-28T23:57:21.255Z",
+  "source": "https://learn.microsoft.com/en-us/sql/relational-databases/showplan-logical-and-physical-operators-reference",
+  "iconBaseUrl": "https://learn.microsoft.com/en-us/sql/relational-databases/media/showplan-logical-and-physical-operators-reference/",
+  "operators": [
+    {
+      "name": "Adaptive Join",
+      "iconFile": "icon-adaptive-join.png",
+      "descriptionEn": "The Adaptive Join operator enables the choice of a hash join or nested loops join method to be deferred until after the first input has been scanned.Adaptive Join is a physical operator. For more information, see Understanding Adaptive joins.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Aggregate",
+      "iconFile": "icon-aggregate.png",
+      "descriptionEn": "The Aggregate operator calculates expressions containing one or more aggregate functions.Aggregate is a logical operator. It can be implemented by the Stream Aggregate, Hash Match, Window Aggregate, or UserDefinedAggregate (CLR) operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Arithmetic Expression",
+      "iconFile": "icon-arithmetic-expression.png",
+      "descriptionEn": "The Arithmetic Expression operator computes a new value from existing values in a row. Arithmetic Expression isn't used in newer versions of SQL Server.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "Assert",
+      "iconFile": "icon-assert.png",
+      "descriptionEn": "The Assert operator verifies a condition. For example, it validates referential integrity or ensures that a scalar subquery returns one row. For each input row, the Assert operator evaluates the expression in the Properties pane of the execution plan. If this expression evaluates to `NULL`, the row is passed through the Assert operator and the query execution continues. If this expression evaluates to a non-null value, the appropriate error is raised.Assert is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Assign",
+      "iconFile": "icon-assign.png",
+      "descriptionEn": "The Assign operator assigns the value of an expression or a constant to a variable.Assign is a language element.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Async Concat",
+      "iconFile": null,
+      "descriptionEn": "The Async Concat operator is used only in remote queries (distributed queries). It has *n* children and one parent node. Usually, some of the children are remote computers that participate in a distributed query. Async Concat issues `Open()` calls to all of the children simultaneously and then applies a bitmap to each child. For each bit that is a `1`, Async Concat sends the output rows to the parent node on demand.Async Concat is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Batch Hash Table Build",
+      "iconFile": "icon-batch-hash-table-build.png",
+      "descriptionEn": "The Batch Hash Table Build operator builds a batch hash table for a memory-optimized columnstore index.Applies to: SQL Server 2012 (11.x) only.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "Bitmap",
+      "iconFile": "icon-bitmap.png",
+      "descriptionEn": "SQL Server uses the Bitmap operator to implement bitmap filtering in parallel query plans. Bitmap filtering speeds up query processing by eliminating rows with key values that can't produce any join records before passing rows through another operator such as the Parallelism operator. A bitmap filter uses a compact representation of a set of values from a table in one part of the operator tree to filter rows from a second table in another part of the tree. By removing unnecessary rows early in the query, subsequent operators have fewer rows to work with, and the overall performance of the query improves. The optimizer determines when a bitmap is selective enough to be useful and in which operators to apply the filter.Bitmap is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Bitmap Create",
+      "iconFile": "icon-bitmap.png",
+      "descriptionEn": "The Bitmap Create operator appears in the showplan output where bitmaps are built.Bitmap Create is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Branch Repartition",
+      "iconFile": null,
+      "descriptionEn": "In a parallel query plan, sometimes there are conceptual regions of iterators. All of the iterators within such a region can run on parallel threads. The regions themselves must run serially. Some of the Parallelism iterators within an individual region are called Branch Repartition. The Parallelism iterator at the boundary of two such regions is called Segment Repartition.Branch Repartition and Segment Repartition are logical operators.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Broadcast",
+      "iconFile": "icon-broadcast.png",
+      "descriptionEn": "Broadcast has one child node and *n* parent nodes. Broadcast sends its input rows to multiple consumers on demand. Each consumer gets all of the rows. For example, if all of the consumers are build sides of a hash join, then *n* copies of the hash tables are built.Broadcast is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Clustered Index Delete",
+      "iconFile": "icon-clustered-index-delete.png",
+      "descriptionEn": "The Clustered Index Delete operator deletes rows from the clustered index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. If a SeekPredicate or Predicate is present, then only those rows that satisfy the predicate are deleted.Note: The Object property might list additional nonclustered indexes that the operator modifies at the same time as the clustered index.Clustered Index Delete is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Clustered Index Insert",
+      "iconFile": "icon-clustered-index-insert.png",
+      "descriptionEn": "The Clustered Index Insert operator inserts rows from its input into the clustered index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. The XML showplan includes SetPredicate and ColumnReference properties, which can be used to determine the value to which each column is set. If Clustered Index Insert has no children for insert values, the row inserted is taken from the Insert operator itself.Note: The Object property might list additional nonclustered indexes that the operator modifies at the same time as the clustered index.Clustered Index Insert is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Clustered Index Merge",
+      "iconFile": "icon-clustered-index-merge.png",
+      "descriptionEn": "The Clustered Index Merge operator applies a merge data stream to a clustered index. The operator deletes, updates, or inserts rows from the clustered index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. The actual operation performed depends on the runtime value of the ActionColumn property.Note: The Object property might list additional nonclustered indexes that the operator modifies at the same time as the clustered index.Clustered Index Merge is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Clustered Index Scan",
+      "iconFile": "icon-clustered-index-scan.png",
+      "descriptionEn": "The Clustered Index Scan operator scans the clustered index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. When an optional Predicate is present, only those rows that satisfy the predicate are returned. If the Ordered property in the Properties pane or XML showplan is True, the query processor has determined that the rows must be returned in the order in which the clustered index has sorted them. If the Ordered property is False, the Database Engine scans the index without guaranteeing the order of the output. The SeekPredicate property is only available for a partitioned clustered index.Clustered Index Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Clustered Index Seek",
+      "iconFile": "icon-clustered-index-seek.png",
+      "descriptionEn": "The Clustered Index Seek operator uses the seeking ability of indexes to retrieve rows from a clustered index. The Object property, listed in the Properties pane of the graphical and XML showplans, contains the name of the clustered index being used. The SeekPredicate contains the predicate for the seek. The Database Engine uses the index to process only those rows that satisfy the SeekPredicate. It can also include a Predicate property where the Database Engine evaluates against all rows that satisfy the SeekPredicate, but this is optional and doesn't use indexes to complete this process. The Ordered property is typically True for this operator.Clustered Index Seek is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Clustered Index Update",
+      "iconFile": "icon-clustered-index-update.png",
+      "descriptionEn": "The Clustered Index Update operator updates input rows in the clustered index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. If the Predicate property is present, only those rows that satisfy this predicate are updated. If the SetPredicate property is present, each updated column is set to this value. If the DefineValue property is present, the values that this operator defines are listed. These values might be referenced in the `SET` clause or elsewhere within this operator and elsewhere within this query.Note: The Object property might list additional nonclustered indexes that the operator modifies at the same time as the clustered index.Clustered Index Update is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Collapse",
+      "iconFile": "icon-collapse.png",
+      "descriptionEn": "The Collapse operator optimizes update processing. When an update is performed, it can be split (using the Split operator) into a delete and an insert. The Properties pane contains a *group by* predicate that specifies a list of key columns. If the query processor encounters adjacent rows that delete and insert the same key values, it replaces these separate operations with a single, more efficient update operation.Collapse is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Columnstore Index Delete",
+      "iconFile": "icon-columnstore-index-delete.png",
+      "descriptionEn": "The Columnstore Index Delete operator represents the deletion of rows from the columnstore index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. Deletion occurs via the Clustered Index Delete for a clustered columnstore index, and via the Index Delete operator for a nonclustered columnstore index. The index type (*Clustered*, *NonClustered*, *ViewClustered*, or *ViewNonClustered*) is specified in the IndexKind property in the XML showplan. The SeekPredicate isn't supported for a Columnstore Index Delete. Rows to be deleted are read from a child operator.Columnstore Index Delete is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Columnstore Index Insert",
+      "iconFile": "icon-columnstore-index-insert.png",
+      "descriptionEn": "The Columnstore Index Insert operator represents the insertion of rows from its input into the columnstore index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. Insertion occurs via the Clustered Index Insert for a clustered columnstore index, and via the Index Insert operator for a nonclustered columnstore index. The index type (*Clustered*, *NonClustered*, *ViewClustered*, or *ViewNonClustered*) is specified in the IndexKind property in the XML showplan. The XML showplan includes SetPredicate and ColumnReference properties, which can be used to determine the value to which each column is set.Columnstore Index Insert is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Columnstore Index Merge",
+      "iconFile": "icon-columnstore-index-merge.png",
+      "descriptionEn": "The Columnstore Index Merge represents the application of a merge data stream using the Clustered Index Merge operator. The operator deletes, updates, or inserts rows from the clustered columnstore index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. The index type (*Clustered*, *NonClustered*, *ViewClustered*, or *ViewNonClustered*) is specified in the IndexKind property in the XML showplan. The actual operation performed depends on the runtime value of the ActionColumn property.Columnstore Index Merge is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Columnstore Index Scan",
+      "iconFile": "icon-columnstore-index-scan.png",
+      "descriptionEn": "The Columnstore Index Scan operator represents a scan of the columnstore index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. The scan occurs via the Clustered Index Scan for a clustered columnstore index, and via the Index Scan operator for a nonclustered columnstore index. The index type (*Clustered*, *NonClustered*, *ViewClustered*, or *ViewNonClustered*) is specified in the IndexKind property in the XML showplan. When an optional Predicate is present, only those rows that satisfy the predicate are returned. The SeekPredicate property is only available for a partitioned columnstore index, and only equality or inequality conditions. If the partitioned column is in query predicate, partition elimination and rowgroup elimination can both reduce the number of rowgroups to scan.Columnstore Index Scan is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Columnstore Index Update",
+      "iconFile": "icon-columnstore-index-update.png",
+      "descriptionEn": "The Columnstore Index Update operator represents an update to one or more rows in the columnstore index specified in the Object property, listed in the Properties pane of the graphical and XML showplans. Updates occur via the Clustered Index Update operator for a clustered columnstore index, and via the Index Update operator for a nonclustered columnstore index. The index type (*Clustered*, *NonClustered*, *ViewClustered*, or *ViewNonClustered*) is specified in the IndexKind property in the XML showplan. The SeekPredicate isn't supported for a Columnstore Index Update. Rows to be updated are read from a child operator. If the SetPredicate property is present, each updated column is set to this value. If the DefineValue property is present, the values that this operator defines are listed. These values might be referenced in the `SET` clause or elsewhere within this operator and elsewhere within this query.Columnstore Index Update is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Compute Scalar",
+      "iconFile": "icon-compute-scalar.png",
+      "descriptionEn": "The Compute Scalar operator evaluates an expression to produce a computed scalar value. This might then be returned to the user, referenced elsewhere in the query, or both. An example of both is in a filter predicate or join predicate.Compute Scalar operators that appear in showplans generated by `SET STATISTICS XML` might not contain the RunTimeInformation element. In graphical showplans, Actual Rows, Actual Rebinds, and Actual Rewinds might be absent from the Properties window when the Include Actual Execution Plan option is selected in SQL Server Management Studio. When this occurs, it means that although these operators were used in the compiled query plan, their work was performed by other operators in the runtime query plan. The number of executions in showplan output generated by `SET STATISTICS PROFILE` is equivalent to the sum of rebinds and rewinds in showplans generated by `SET STATISTICS XML`.Compute Scalar is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Concatenation",
+      "iconFile": "icon-concatenation.png",
+      "descriptionEn": "The Concatenation operator scans multiple inputs, returning each row scanned. Concatenation is typically used to implement the Transact-SQL `UNION ALL` construct. The Concatenation physical operator has two or more inputs and one output. Concatenation copies rows from the first input stream to the output stream, then repeats this operation for each additional input stream.Concatenation is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Conditional",
+      "iconFile": "icon-conditional.png",
+      "descriptionEn": "The Conditional operator carries out conditional processing based on an `IF` or `WHILE` loop. If and While are language elements.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Constant Scan",
+      "iconFile": "icon-constant-scan.png",
+      "descriptionEn": "The Constant Scan operator introduces one or more constant rows into a query. A Compute Scalar operator is often used after a Constant Scan to add columns to a row produced by the Constant Scan operator. Constant Scan can generate one or more rows with zero or more columns.Constant Scan is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Convert",
+      "iconFile": "icon-convert.png",
+      "descriptionEn": "The Convert operator converts one scalar data type to another.Convert is a language element.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Cross Join",
+      "iconFile": "icon-join.png",
+      "descriptionEn": "The Cross Join operator joins each row from the first (top) input with each row from the second (bottom) input.Cross Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Cursor",
+      "iconFile": "icon-cursor-catch-all.png",
+      "descriptionEn": "The Cursor logical and physical operators are used to describe how a query or update involving cursor operations is executed. The physical operators describe the physical implementation algorithm used to process the cursor; for example, using a keyset-driven cursor. Each step when running a cursor involves a physical operator. The logical operators describe a property of the cursor, such as the cursor is read only.Logical operators include Asynchronous, Optimistic, Primary, Read Only, Scroll Locks, Secondary, and Synchronous.Physical operators include Dynamic, Fetch Query, Keyset, Population Query, Refresh Query, and Snapshot.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Declare",
+      "iconFile": "icon-declare.png",
+      "descriptionEn": "The Declare operator allocates a local variable in the query plan.Declare is a language element.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Delete",
+      "iconFile": "icon-delete.png",
+      "descriptionEn": "The Delete operator deletes rows (from an object) that satisfy the optional predicate in the Properties pane.Delete is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Deleted Scan",
+      "iconFile": "icon-deleted-scan.png",
+      "descriptionEn": "In triggers, the Deleted Scan operator scans the deleted table.Deleted Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Distinct",
+      "iconFile": null,
+      "descriptionEn": "The Distinct operator removes duplicates from a rowset or from a collection of values.Distinct is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Distinct Sort",
+      "iconFile": null,
+      "descriptionEn": "The Distinct Sort logical operator scans the input, removing duplicates and sorting by the columns specified in the *distinct order by* predicate of the Properties pane.Distinct Sort is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Distribute Streams",
+      "iconFile": "icon-parallelism-distribute-streams.png",
+      "descriptionEn": "The Distribute Streams operator is used only in parallel query plans. The Distribute Streams operator takes a single input stream of records and produces multiple output streams. The record contents and format aren't changed. Each record from the input stream appears in one of the output streams, unless the partitioning type is Broadcast, in which case each input row appears on all output streams. This operator automatically preserves the relative order of the input records in the output streams. Usually, hashing is used to decide to which output stream a particular input record belongs.If the output is partitioned, then the Properties pane contains a *partition columns* predicate and the partitioning columns.Distribute Streams is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Dynamic",
+      "iconFile": "icon-dynamic.png",
+      "descriptionEn": "The Dynamic operator uses a cursor that can see all changes made by others.Dynamic is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Eager Spool",
+      "iconFile": "icon-spool.png",
+      "descriptionEn": "The Eager Spool operator takes the entire input, storing each row in a hidden temporary object stored in the tempdb database. If the operator is rewound (for example, by a Nested Loops operator) but no rebinding is needed, the spooled data is used instead of rescanning the input. If rebinding is needed, the spooled data is discarded and the spool object is rebuilt by rescanning the (rebound) input. The Eager Spool operator builds its spool file in an \"eager\" manner: when the spool's parent operator asks for the first row, the spool operator consumes all rows from its input operator and stores them in the spool.Eager Spool is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Fetch Query",
+      "iconFile": "icon-fetch-query.png",
+      "descriptionEn": "The Fetch Query operator retrieves rows when a fetch is issued against a cursor.Fetch Query is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Filter",
+      "iconFile": "icon-filter.png",
+      "descriptionEn": "The Filter operator scans the input, returning only those rows that satisfy the filter expression (predicate) that appears in the Properties pane.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "Flow Distinct",
+      "iconFile": null,
+      "descriptionEn": "The Flow Distinct operator scans the input, removing duplicates. Whereas the Distinct operator consumes all input before producing any output, the Flow Distinct operator returns each row as it's obtained from the input (unless that row is a duplicate, in which case it's discarded).Flow Distinct is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Foreign Key References Check",
+      "iconFile": "icon-referential-integrity.png",
+      "descriptionEn": "The Foreign Key References Check operator performs referential integrity checks in place, by comparing the modified row to the rows in the referencing tables to verify that the modification doesn't break the referential integrity. The Foreign Key References Check operator is used when more than 253 foreign key references exist on the same primary or unique key.Foreign Key References Check is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Full Outer Join",
+      "iconFile": "icon-join.png",
+      "descriptionEn": "The Full Outer Join logical operator returns each row satisfying the join predicate from the first (top) input joined with each row from the second (bottom) input. It also returns rows from:- The first input that had no matches in the second input.- The second input that had no matches in the first input.The input that doesn't contain the matching values is returned as a null value.Full Outer Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Gather Streams",
+      "iconFile": "icon-parallelism.png",
+      "descriptionEn": "The Gather Streams operator is only used in parallel query plans. The Gather Streams operator consumes several input streams and produces a single output stream of records by combining the input streams. The record contents and format aren't changed. If this operator is order preserving, all input streams must be ordered. If the output is ordered, the Properties pane contains an *order by* predicate and the names of columns being ordered.Gather Streams is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Hash Match",
+      "iconFile": "icon-hash-match.png",
+      "descriptionEn": "The Hash Match operator builds a hash table by computing a hash value for each row from its build input. A *hash* predicate, with a list of columns used to create a hash value, appears in the Properties pane. Then, for each probe row (as applicable), it computes a hash value (using the same hash function) and looks in the hash table for matches. If a residual predicate is present (shown as Build Residual or Probe Residual in the Properties pane), that predicate must also be satisfied for rows to be considered a match. Behavior depends on the logical operation being performed:- For any joins, use the first (top) input to build the hash table and the second (bottom) input to probe the hash table. Output matches (or nonmatches) as dictated by the join type. If multiple joins use the same join column, these operations are grouped into a hash team.- For the distinct or aggregate operators, use the input to build the hash table (removing duplicates and computing any aggregate expressions). When the hash table is built, scan the table and output all entries.- For the union operator, use the first input to build the hash table (removing duplicates). Use the second input (which must have no duplicates) to probe the hash table, returning all rows that have no matches, then scan the hash table and return all entries.Hash Match is a physical operator. For more information, see Understanding Hash joins.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Index Delete",
+      "iconFile": "icon-nonclustered-index-delete.png",
+      "descriptionEn": "The Index Delete operator deletes rows from the nonclustered index specified in the Properties pane.Index Delete is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Index Insert",
+      "iconFile": "icon-nonclustered-index-insert.png",
+      "descriptionEn": "The Index Insert operator inserts rows from its input into the nonclustered index specified in the Properties pane. The Properties pane also contains a *set* predicate, which indicates the value to which each column is set.Index Insert is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Index Scan",
+      "iconFile": "icon-nonclustered-index-scan.png",
+      "descriptionEn": "The Index Scan operator retrieves all rows from the nonclustered index specified in the Properties pane. If an optional *where* predicate appears in the Properties pane, only those rows that satisfy the predicate are returned. If the Ordered property is True, the rows are returned in the order in which the nonclustered index has sorted them. If the Ordered property is False, the Database Engine scans the index without guaranteeing the order of the output.Index Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Index Seek",
+      "iconFile": "icon-nonclustered-index-seek.png",
+      "descriptionEn": "The Index Seek operator uses the seeking ability of indexes to retrieve rows from a nonclustered index. The Properties pane contains the name of the nonclustered index being used. It also contains the *seek* predicate. The Database Engine uses the index to process only those rows that satisfy the *seek* predicate. It optionally might include a *where* predicate, which the Database Engine evaluates against all rows that satisfy the *seek* predicate (it doesn't use the indexes to do this).Index Seek is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Index Spool",
+      "iconFile": "icon-nonclustered-index-spool.png",
+      "descriptionEn": "The Index Spool operator contains a *seek* predicate in the Properties pane. The Index Spool operator scans its input rows, placing a copy of each row in a hidden spool file (stored in the tempdb database and existing only for the lifetime of the query), and builds an index on the rows. This allows you to use the seeking capability of indexes to output only those rows that satisfy the *seek* predicate.Index Spool is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Index Update",
+      "iconFile": "icon-nonclustered-index-update.png",
+      "descriptionEn": "The Index Update physical operator updates rows from its input in the nonclustered index specified in the Properties pane. If a *set* predicate is present, each updated column is set to this value.Index Update is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Inner Join",
+      "iconFile": "icon-join.png",
+      "descriptionEn": "The Inner Join operator returns each row that satisfies the join predicate of the first (top) input with the second (bottom) input.Inner Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Insert",
+      "iconFile": "icon-insert.png",
+      "descriptionEn": "The Insert operator inserts each row from its input into the object specified in the Properties pane. The physical operator is either the Table Insert, Index Insert, or Clustered Index Insert operator.Insert is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Inserted Scan",
+      "iconFile": "icon-inserted-scan.png",
+      "descriptionEn": "In triggers, the Inserted Scan operator scans the inserted table.Inserted Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Intrinsic",
+      "iconFile": "icon-intrinsic.png",
+      "descriptionEn": "The Intrinsic operator invokes an internal Transact-SQL function.Intrinsic is a language element.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Iterator",
+      "iconFile": "icon-iterator-catch-all.png",
+      "descriptionEn": "The Iterator catchall icon is displayed when a suitable icon for the iterator can't be found by the logic that produces graphical showplans. The catchall icon doesn't necessarily indicate an error condition.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "Key Lookup",
+      "iconFile": "icon-key-lookup.png",
+      "descriptionEn": "The Key Lookup operator is a bookmark lookup on a table with a clustered index or a clustered columnstore index. For a clustered index, the Properties pane contains the name of the clustered index and the clustering key used to look up the row. For a clustered columnstore index, the ColStoreLoc is provided instead of the clustering key. Key Lookup is always accompanied by a Nested Loops operator. If the `WITH PREFETCH` clause appears in the Properties pane, the query processor has determined that it's optimal to use asynchronous prefetching (read-ahead) when looking up bookmarks in the clustered index.A Key Lookup with a high number of executions relative to the table size might benefit from adding a covering index. A low number of executions is typically not a performance concern.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "Keyset",
+      "iconFile": "icon-keyset.png",
+      "descriptionEn": "The Keyset operator uses a cursor that can see updates, but not inserts, made by others.Keyset is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Language Element",
+      "iconFile": "icon-language-construct-catch-all.png",
+      "descriptionEn": "The Language Element catchall icon is displayed when a suitable icon for the iterator can't be found by the logic that produces graphical showplans. The catchall icon doesn't necessarily indicate an error condition.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Lazy Spool",
+      "iconFile": "icon-spool.png",
+      "descriptionEn": "The Lazy Spool logical operator stores each row from its input in a hidden temporary object stored in the tempdb database. If the operator is rewound (for example, by a Nested Loops operator) but no rebinding is needed, the spooled data is used instead of rescanning the input. If rebinding is needed, the spooled data is discarded and the spool object is rebuilt by rescanning the (rebound) input. The Lazy Spool operator builds its spool file in a \"lazy\" manner, that is, each time the spool's parent operator asks for a row, the spool operator gets a row from its input operator and stores it in the spool, rather than consuming all rows at once.Lazy Spool is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Left Anti Semi Join",
+      "iconFile": null,
+      "descriptionEn": "The Left Anti Semi Join operator returns each row from the first (top) input when there's no matching row in the second (bottom) input. If no join predicate exists in the Properties pane, each row is a matching row.Left Anti Semi Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Left Outer Join",
+      "iconFile": null,
+      "descriptionEn": "The Left Outer Join operator returns each row that satisfies the join predicate of the first (top) input with the second (bottom) input. It also returns any rows from the first input that have no matching rows in the second input. The nonmatching rows in the second input are returned as null values. If no join predicate exists in the Properties pane, each row is a matching row.Left Outer Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Left Semi Join",
+      "iconFile": null,
+      "descriptionEn": "The Left Semi Join operator returns each row from the first (top) input when there's a matching row in the second (bottom) input. If no join predicate exists in the Properties pane, each row is a matching row.Left Semi Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Log Row Scan",
+      "iconFile": "icon-log-row-scan.png",
+      "descriptionEn": "The Log Row Scan operator scans the transaction log.Log Row Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Merge Interval",
+      "iconFile": "icon-merge-interval.png",
+      "descriptionEn": "The Merge Interval operator merges multiple (potentially overlapping) intervals to produce minimal, nonoverlapping intervals that are then used to seek index entries. This operator typically appears before one or more Compute Scalar operators over Constant Scan operators, which construct the intervals (represented as columns in a row) that this operator merges.Merge Interval is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Merge Join",
+      "iconFile": "icon-merge-join.png",
+      "descriptionEn": "The Merge Join operator performs the inner join, left outer join, left semi join, left anti semi join, right outer join, right semi join, right anti semi join, full outer join, concatenation, and union logical operations.In the Properties pane, the Merge Join operator contains a *merge* predicate if the operation is performing a one-to-many join, or a *many-to-many merge* predicate if the operation is performing a many-to-many join. The Properties pane also includes a comma-separated list of columns used to perform the operation. The Merge Join operator requires two inputs sorted on their respective columns, possibly by inserting explicit sort operations into the query plan. Merge join is particularly effective if explicit sorting isn't required, for example, if there's a suitable B-tree index in the database or if the sort order can be exploited for multiple operations, such as a merge join and grouping with rollup.Merge Join is a physical operator. For more information, see Understanding Merge joins.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Nested Loops",
+      "iconFile": "icon-nested-loops.png",
+      "descriptionEn": "The Nested Loops operator performs the inner join, left outer join, left semi join, and left anti semi join logical operations.Nested loop joins run the inner (bottom) input once for each row of the outer (top) input. When the Outer References property is present, the join is *dynamic*: the listed column values from the outer row are pushed into the inner input so that its operators return only matching rows. The Predicate property isn't used in this case. When Outer References is absent, the join is *static*: the inner input returns the same rows on each execution, and a Predicate in the Properties pane determines which combinations qualify as matches.When the `OPTIMIZED` attribute is set to `True`, the operator reorders the outer input to improve I/O locality when accessing the inner input. This is sometimes called an Optimized Nested Loops join.Nested Loops is a physical operator. For more information, see Understanding Nested Loops joins.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Online Index Insert",
+      "iconFile": null,
+      "descriptionEn": "The Online Index Insert operator indicates that an index operation (create, alter, or drop) is performed online. That is, the underlying table data remains available to users during the index operation.Online Index Insert is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Parallelism",
+      "iconFile": null,
+      "descriptionEn": "The Parallelism operator (or Exchange Iterator) performs the distribute streams, gather streams, and repartition streams logical operations. The Properties pane can contain a *partition columns* predicate with a comma-separated list of the columns being partitioned. The Properties pane can also contain an *order by* predicate, listing the columns to preserve the sort order for during partitioning.Note: If a query has been compiled as a parallel query, but at run time it's run as a serial query, the showplan output generated by `SET STATISTICS XML` or by using the Include Actual Execution Plan option in SQL Server Management Studio doesn't contain the `RunTimeInformation` element for the Parallelism operator. In `SET STATISTICS PROFILE` output, the actual row counts and actual number of executions display zeroes for the Parallelism operator. When either condition occurs, it means that the Parallelism operator was only used during query compilation and not in the runtime query plan. Sometimes parallel query plans are run in serial if there's a high concurrent load on the server.Parallelism is a physical operator. For more information about the Parallelism operator, see The Parallelism Operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Parameter Table Scan",
+      "iconFile": "icon-parameter-table-scan.png",
+      "descriptionEn": "The Parameter Table Scan operator reads the internal rowset that's produced during an `INSERT ... EXEC` statement. This rowset contains the output of the executed module, such as a stored procedure or dynamic SQL batch, when those results are inserted into a table, temporary table, or table variable.Parameter Table Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Partial Aggregate",
+      "iconFile": null,
+      "descriptionEn": "Partial Aggregate is typically used in parallel plans. It applies an aggregation function to as many input rows as possible so that writing to disk (known as a \"spill\") isn't necessary. Hash Match is the only physical operator (iterator) that implements partial aggregation.Partial Aggregate is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Population Query",
+      "iconFile": "icon-population-query.png",
+      "descriptionEn": "The Population Query operator populates the work table of a cursor when the cursor is opened.Population Query is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Put",
+      "iconFile": "icon-put.png",
+      "descriptionEn": "The Put operator inserts data into an external (PolyBase) table. Unlike other insert operators, Put doesn't return any rows to its parent operator. In SQL Server 2016 (13.x) through SQL Server 2019 (15.x), the Put operator targets Hadoop and runs in row mode. In SQL Server 2022 (16.x) and later versions, the Put operator targets Azure Storage or S3-compatible storage and runs in batch mode. For more information, see CREATE EXTERNAL TABLE AS SELECT (CETAS).Put is a physical operator.Applies to: SQL Server 2016 (13.x) and later versions.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "RID Lookup",
+      "iconFile": "icon-row-id-nonclustered-locate.png",
+      "descriptionEn": "RID Lookup is a bookmark lookup on a heap using a supplied row identifier (RID). The Properties pane contains the bookmark label used to look up the row in the table and the name of the table in which the row is looked up. RID Lookup is always accompanied by a Nested Loops operator.RID Lookup is a physical operator. For more information about bookmark lookups, see Read Committed and Bookmark Lookup.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Refresh Query",
+      "iconFile": "icon-refresh-query.png",
+      "descriptionEn": "The Refresh Query operator fetches current data for rows in the fetch buffer.Refresh Query is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Remote Delete",
+      "iconFile": "icon-remote-delete.png",
+      "descriptionEn": "The Remote Delete operator deletes the input rows from a remote object.Remote Delete is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Remote Index Scan",
+      "iconFile": "icon-remote-index-scan.png",
+      "descriptionEn": "The Remote Index Scan operator scans the remote index specified in the Properties pane.Remote Index Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Remote Index Seek",
+      "iconFile": "icon-remote-index-seek.png",
+      "descriptionEn": "The Remote Index Seek operator uses the seeking ability of a remote index object to retrieve rows. The Properties pane contains the name of the remote index being used and the *seek* predicate.Remote Index Seek is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Remote Insert",
+      "iconFile": "icon-remote-insert.png",
+      "descriptionEn": "The Remote Insert operator inserts the input rows into a remote object.Remote Insert is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Remote Query",
+      "iconFile": "icon-remote-query.png",
+      "descriptionEn": "The Remote Query operator submits a query to a remote source. The text of the query sent to the remote server appears in the Properties pane.Remote Query is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Remote Scan",
+      "iconFile": "icon-remote-scan.png",
+      "descriptionEn": "The Remote Scan operator scans a remote object. The name of the remote object appears in the Properties pane.Remote Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Remote Update",
+      "iconFile": "icon-remote-update.png",
+      "descriptionEn": "The Remote Update operator updates the input rows in a remote object.Remote Update is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Repartition Streams",
+      "iconFile": "icon-parallelism-repartition-streams.png",
+      "descriptionEn": "The Repartition Streams operator (or exchange iterator) consumes multiple streams and produces multiple streams of records. The record contents and format aren't changed. If the Query Optimizer uses a bitmap filter, the number of rows in the output stream is reduced. Each record from an input stream is placed into one output stream. If this operator is order preserving, all input streams must be ordered and merged into several ordered output streams. If the output is partitioned, the Properties pane contains a *partition columns* predicate and the partitioning columns. If the output is ordered, the Properties pane contains an *order by* predicate and the columns being ordered. The operator is used only in parallel query plans.Repartition Streams is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Result",
+      "iconFile": "icon-result.png",
+      "descriptionEn": "The Result operator is the data returned at the end of a query plan. This is usually the root element of a showplan.Result is a language element.",
+      "operatorKind": "language"
+    },
+    {
+      "name": "Right Anti Semi Join",
+      "iconFile": null,
+      "descriptionEn": "The Right Anti Semi Join operator outputs each row from the second (bottom) input when a matching row in the first (top) input doesn't exist. A matching row is defined as a row that satisfies the predicate in the Properties pane (if no predicate exists, each row is a matching row).Right Anti Semi Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Right Outer Join",
+      "iconFile": null,
+      "descriptionEn": "The Right Outer Join operator returns each row that satisfies the join of the second (bottom) input with each matching row from the first (top) input. It also returns any rows from the second input that had no matching rows in the first input, joined with `NULL`. If no join predicate exists in the Properties pane, each row is a matching row.Right Outer Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Right Semi Join",
+      "iconFile": null,
+      "descriptionEn": "The Right Semi Join operator returns each row from the second (bottom) input when there's a matching row in the first (top) input. If no join predicate exists in the Properties pane, each row is a matching row.Right Semi Join is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Row Count Spool",
+      "iconFile": "icon-remote-count-spool.png",
+      "descriptionEn": "The Row Count Spool operator scans the input, counting how many rows are present and returning the same number of rows without any data in them. This operator is used when it's important to check for the existence of rows, rather than the data contained in the rows. For example, if a Nested Loops operator performs a left semi join operation and the join predicate applies to inner input, a row count spool might be placed at the top of the inner input of the Nested Loops operator. Then the Nested Loops operator can determine how many rows are output by the row count spool (because the actual data from the inner side isn't needed) to determine whether to return the outer row.Row Count Spool is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Segment",
+      "iconFile": "icon-segment.png",
+      "descriptionEn": "The Segment operator divides the input set into segments based on the value of one or more columns. These columns are shown as arguments in the Segment operator. The input is sorted by these columns. The operator uses the segment column to mark the first row of each segment.Segment is a physical and logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Segment Repartition",
+      "iconFile": null,
+      "descriptionEn": "In a parallel query plan, sometimes there are conceptual regions of iterators. All of the iterators within such a region can run on parallel threads. The regions themselves must run serially. Some of the Parallelism iterators within an individual region are called Branch Repartition. The Parallelism iterator at the boundary of two such regions is called Segment Repartition.Branch Repartition and Segment Repartition are logical operators.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Sequence",
+      "iconFile": "icon-sequence.png",
+      "descriptionEn": "The Sequence operator runs each input in sequence (top to bottom) and returns only those rows that come from its last (bottom) input. Common uses include wide update plans (where each input is typically an update of a different object), queries that use multi-statement table-valued functions, and queries that use `SHORTEST_PATH` on a graph table.Sequence is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Sequence Project",
+      "iconFile": "icon-sequence-project.png",
+      "descriptionEn": "The Sequence Project operator adds columns to perform computations over an ordered set. It requires dividing the input set into segments based on the value of one or more columns.Sequence Project is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Snapshot",
+      "iconFile": "icon-snapshot.png",
+      "descriptionEn": "The Snapshot operator creates a cursor that doesn't see changes made by others.Snapshot is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Sort",
+      "iconFile": "icon-sort.png",
+      "descriptionEn": "The Sort operator sorts all incoming rows. The Properties pane contains either a *distinct order by* predicate if duplicates are removed by this operation, or an *order by* predicate with a comma-separated list of the columns being sorted. The columns are prefixed with the value `ASC` if the columns are sorted in ascending order, or the value `DESC` if the columns are sorted in descending order.Sort is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Split",
+      "iconFile": "icon-split.png",
+      "descriptionEn": "The Split operator is used to optimize update processing. It splits each update operation into a delete and an insert operation.Split is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Spool",
+      "iconFile": "icon-spool.png",
+      "descriptionEn": "The Spool operator saves an intermediate query result to the tempdb database.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "Stream Aggregate",
+      "iconFile": "icon-stream-aggregate.png",
+      "descriptionEn": "The Stream Aggregate operator groups rows by one or more columns and then calculates one or more aggregate expressions returned by the query. The Stream Aggregate operator requires input ordered by the columns within its groups. The optimizer uses a Sort operator before this operator if the data isn't already sorted due to a previous Sort operator, or due to an ordered index seek or scan. In the `SHOWPLAN_ALL` statement or the graphical execution plan in SQL Server Management Studio, the columns in the *group by* predicate are listed in the Properties pane, and the aggregate expressions are listed in the Defined Values column.Stream Aggregate is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Switch",
+      "iconFile": "icon-switch.png",
+      "descriptionEn": "Switch is a special type of concatenation iterator that has *n* inputs. An expression is associated with each Switch operator. Depending on the return value of the expression (between 0 and *n*-1), Switch runs the appropriate input and returns its rows. Switch is used to implement query plans for `INSERT INTO` statements against partitioned views. It's also used to implement query plans involving fast forward cursors with certain operators such as the `TOP` operator.Switch is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Table Delete",
+      "iconFile": "icon-table-delete.png",
+      "descriptionEn": "The Table Delete operator deletes rows from the table specified in the Properties pane of the query execution plan.Table Delete is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Table Insert",
+      "iconFile": "icon-table-insert.png",
+      "descriptionEn": "The Table Insert operator inserts rows from its input into the table specified in the Properties pane of the query execution plan. The Properties pane also contains a *set* predicate, which indicates the value to which each column is set. If Table Insert has no children for insert values, then the row inserted is taken from the Insert operator itself.Table Insert is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Table Merge",
+      "iconFile": "icon-table-merge.png",
+      "descriptionEn": "The Table Merge operator applies a merge data stream to a heap. The operator deletes, updates, or inserts rows in the table specified in the Properties pane of the operator. The actual operation performed depends on the runtime value of the ActionColumn propertyTable Merge is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Table Scan",
+      "iconFile": "icon-table-scan.png",
+      "descriptionEn": "The Table Scan operator retrieves all rows from the table specified in the Properties pane of the query execution plan. If a *where* predicate appears in the Properties pane, only those rows that satisfy the predicate are returned.Table Scan is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Table Spool",
+      "iconFile": "icon-table-spool.png",
+      "descriptionEn": "The Table Spool operator scans the input and places a copy of each row in a hidden spool table that is stored in the tempdb database and existing only for the lifetime of the query. If the operator is rewound (for example, by a Nested Loops operator) but no rebinding is needed, the spooled data is used instead of rescanning the input.Table Spool is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Table Update",
+      "iconFile": "icon-table-update.png",
+      "descriptionEn": "The Table Update operator updates input rows in the table specified in the Properties pane of the query execution plan. The *set* predicate determines the value of each updated column. These values might be referenced in the `SET` clause or elsewhere within this operator, and elsewhere within this query.Table Update is a physical operator.",
+      "operatorKind": "physical"
+    },
+    {
+      "name": "Table-valued Function",
+      "iconFile": "icon-table-valued-function.png",
+      "descriptionEn": "The Table-valued Function operator evaluates a table-valued function (either Transact-SQL or CLR), and stores the resulting rows in the tempdb database. When the parent iterators request the rows, Table-valued Function returns the rows from `tempdb`.Queries with calls to table-valued functions generate query plans with the Table-valued Function iterator. Table-valued Function can be evaluated with different parameter values:- Table-valued Function XML Reader inputs an XML BLOB as a parameter and produces a rowset representing XML nodes in XML document order. Other input parameters might restrict XML nodes returned to a subset of XML document.- Table Valued Function XML Reader with XPath filter is a special type of XML Reader Table-valued Function that restricts output to XML nodes satisfying an XPath expression.Table-valued Function is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Top",
+      "iconFile": "icon-top.png",
+      "descriptionEn": "The Top operator scans the input, returning only the first specified number or percent of rows, possibly based on a sort order. The Properties pane can contain a list of the columns that are being checked for ties. In update plans, the Top operator is used to enforce row count limits.Top is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Top N Sort",
+      "iconFile": null,
+      "descriptionEn": "Top N Sort is similar to the Sort iterator, except that only the first *N* rows are needed, and not the entire result set. For small values of *N*, the SQL Server query execution engine attempts to perform the entire sort operation in memory. For large values of *N*, the query execution engine resorts to the more generic method of sorting to which *N* isn't a parameter.",
+      "operatorKind": "unknown"
+    },
+    {
+      "name": "UDX",
+      "iconFile": "icon-udx-extended-operator.png",
+      "descriptionEn": "Extended Operators (UDX) implement one of many XQuery and XPath operations in SQL Server.- Extended operator (UDX) `FOR XML` is used to serialize the relational row set it inputs into XML representation in a single BLOB column in a single output row. It's an order sensitive XML aggregation operator.- Extended operator (UDX) `XML SERIALIZER` is an order sensitive XML aggregation operator. It inputs rows representing XML nodes or XQuery scalars in XML document order and produces a serialized XML BLOB in a single XML column in a single output row.- Extended operator (UDX) `XML FRAGMENT SERIALIZER` is a special type of `XML SERIALIZER` that is used for processing input rows representing XML fragments being inserted in XQuery insert data modification extension.- Extended operator (UDX) `XQUERY STRING` evaluates the XQuery string value of input rows representing XML nodes. It's an order sensitive string aggregation operator. It outputs one row with columns representing the XQuery scalar that contains string value of the input.- Extended operator (UDX) `XQUERY LIST DECOMPOSER` is an XQuery list decomposition operator. For each input row representing an XML node, it produces one or more rows each representing XQuery scalar containing a list element value if the input is of XSD list type.- Extended operator (UDX) `XQUERY DATA` evaluates the XQuery `fn:data()` function on input representing XML nodes. It's an order sensitive string aggregation operator. It outputs one row with columns representing XQuery scalar that contains the result of `fn:data()`.- Extended operator `XQUERY CONTAINS` evaluates the XQuery `fn:contains()` function on input representing XML nodes. It's an order sensitive string aggregation operator. It outputs one row with columns representing XQuery scalar that contains the result of `fn:contains()`.- Extended operator `UPDATE XML NODE` updates XML node in the XQuery replace data modification extension in the `modify()` method on XML type.UDX operators are both logical and physical operators.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Union",
+      "iconFile": "icon-union.png",
+      "descriptionEn": "The Union operator scans multiple inputs, outputting each row scanned and removing duplicates.Union is a logical operator.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Update",
+      "iconFile": "icon-update.png",
+      "descriptionEn": "The Update operator updates each row from its input in the object specified in the Properties pane of the query execution plan.Update is a logical operator. The physical operator is Table Update, Index Update, Clustered Index Update, or Columnstore Index Update.",
+      "operatorKind": "logical"
+    },
+    {
+      "name": "Window Aggregate",
+      "iconFile": null,
+      "descriptionEn": "The Window Aggregate operator evaluates one or more aggregate expressions with a window definition and adds their results to the data stream.Window Aggregate is a logical and physical operator.",
+      "operatorKind": "both"
+    },
+    {
+      "name": "Window Spool",
+      "iconFile": "icon-table-spool.png",
+      "descriptionEn": "The Window Spool operator expands each row into the set of rows that represents the window associated with it. In a query, the `OVER` clause defines the window within a query result set and a window function then computes a value for each row in the window. The operator stores all input rows in a hidden worktable in the tempdb database or in memory.Window Spool is a logical and physical operator.",
+      "operatorKind": "both"
+    }
+  ]
+}
