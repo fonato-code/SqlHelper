@@ -159,6 +159,18 @@
         if (!st) return '';
         return S.highlightPlanSql(st.statementText);
       },
+      statementSqlText() {
+        const st = this.selectedStatement;
+        return st ? String(st.statementText || '') : '';
+      },
+      statementSqlLineCount() {
+        const t = this.statementSqlText;
+        if (!t) return 0;
+        return t.split(/\r?\n/).length;
+      },
+      statementSqlCharCount() {
+        return this.statementSqlText.length;
+      },
       diagramZoomPct() {
         return Math.round(this.diagramZoom * 100);
       },
@@ -581,6 +593,12 @@
         if (node && node.parallel) t += ' · Executado em paralelo';
         return t;
       },
+      openPlanNodeModalById(nodeId) {
+        const st = this.selectedStatement;
+        if (!st || nodeId == null || nodeId === '') return;
+        const node = S.findPlanNodeById ? S.findPlanNodeById(st.flatOps, nodeId) : null;
+        if (node) this.openPlanNodeModal(node);
+      },
       openPlanNodeModal(node) {
         if (!node) return;
         const st = this.selectedStatement;
@@ -600,6 +618,16 @@
       },
       showToast(msg) {
         S.showToast(this, msg);
+      },
+      async copyStatementSql() {
+        const text = this.statementSqlText;
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          this.showToast('Consulta copiada.');
+        } catch (e) {
+          this.showToast('Não foi possível copiar.');
+        }
       }
     },
     mixins: [S.themeMixin]

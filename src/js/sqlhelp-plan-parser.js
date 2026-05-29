@@ -405,6 +405,7 @@
       const key = [n.objectRef.database, n.objectRef.schema, n.objectRef.table, n.objectRef.index]
         .filter(Boolean)
         .join('.');
+      const reads = n.actualLogicalReads || 0;
       const prev = map.get(key) || {
         database: n.objectRef.database,
         schema: n.objectRef.schema,
@@ -413,16 +414,25 @@
         logicalReads: 0,
         physicalReads: 0,
         actualRows: 0,
-        ops: new Set()
+        ops: new Set(),
+        primaryNodeId: null,
+        _maxReads: -1
       };
-      prev.logicalReads += n.actualLogicalReads || 0;
+      prev.logicalReads += reads;
       prev.physicalReads += n.actualPhysicalReads || 0;
       prev.actualRows += n.actualRows || 0;
       prev.ops.add(n.physicalOp);
+      if (reads >= prev._maxReads) {
+        prev._maxReads = reads;
+        prev.primaryNodeId = n.nodeId;
+      }
       map.set(key, prev);
     }
     return Array.from(map.values())
-      .map((r) => ({ ...r, ops: Array.from(r.ops).join(', ') }))
+      .map((r) => {
+        const { _maxReads, ops, ...rest } = r;
+        return { ...rest, ops: Array.from(ops).join(', ') };
+      })
       .sort((a, b) => b.logicalReads - a.logicalReads);
   }
 
@@ -539,7 +549,7 @@
         issues.push({
           severity: 'danger',
           code: 'op_row_estimate',
-          message: `Operador ${n.physicalOp} (nó ${n.nodeId}): estimado ${n.estimateRows}, atual ${n.actualRows}`,
+          message: `Operador ${n.physicalOp}: estimado ${n.estimateRows}, atual ${n.actualRows}`,
           nodeId: n.nodeId
         });
       }
@@ -547,7 +557,7 @@
         issues.push({
           severity: 'warning',
           code: 'cartesian',
-          message: `Join sem predicado (CROSS JOIN implícito) no nó ${n.nodeId} — ${n.physicalOp}`,
+          message: `Join sem predicado (CROSS JOIN implícito) — ${n.physicalOp}`,
           nodeId: n.nodeId
         });
       }
@@ -1093,6 +1103,12 @@
     };
   }
 
+  function findPlanNodeById(flatOps, nodeId) {
+    if (nodeId == null || nodeId === '') return null;
+    return (flatOps || []).find((n) => String(n.nodeId) === String(nodeId)) || null;
+  }
+
+  SqlHelp.findPlanNodeById = findPlanNodeById;
   SqlHelp.parseShowPlanXml = parseShowPlanXml;
   SqlHelp.highlightPlanSql = highlightPlanSql;
   SqlHelp.formatPlanExprHtml = formatPlanExprHtml;

@@ -185,8 +185,6 @@
             </span>
           </div>
           <div class="card-body">
-            <pre class="plan-sql-view mb-3" v-html="highlightedSql"></pre>
-
             <ul class="nav nav-tabs mb-3">
               <li class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: planTab === 'diagram' }" @click="planTab = 'diagram'">
@@ -228,6 +226,11 @@
                     <i class="fal fa-exclamation-triangle"></i>
                     <span>{{ selectedStatement.issues.length }}</span>
                   </span>
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: planTab === 'query' }" @click="planTab = 'query'">
+                  <i class="fal fa-code me-1"></i>Consulta SQL
                 </button>
               </li>
             </ul>
@@ -306,9 +309,11 @@
 
             <div v-show="planTab === 'tree'" class="plan-tree-list">
               <div v-for="op in selectedStatement.flatOps" :key="op.nodeId"
-                   class="plan-tree-item"
+                   class="plan-tree-item plan-row-clickable"
                    :class="{ 'plan-tree-hot': (op.costPercent || 0) >= 20 }"
-                   :style="{ '--plan-tree-depth': op.depth != null ? op.depth : 0 }">
+                   :style="{ '--plan-tree-depth': op.depth != null ? op.depth : 0 }"
+                   title="Clique para ver detalhes do nó"
+                   @click="openPlanNodeModalById(op.nodeId)">
                 <span class="plan-tree-id">[{{ op.nodeId }}]</span>
                 <span class="plan-tree-op">{{ op.physicalOp }}</span>
                 <span v-if="op.objectRef?.table" class="plan-tree-obj"> — {{ op.objectRef.table }}</span>
@@ -337,7 +342,10 @@
                 </thead>
                 <tbody>
                   <tr v-for="op in selectedStatement.topOps" :key="'top-' + op.nodeId"
-                      :class="op.rowMismatch === 'high' ? 'plan-row-mismatch-high' : ''">
+                      class="plan-row-clickable"
+                      :class="op.rowMismatch === 'high' ? 'plan-row-mismatch-high' : ''"
+                      title="Clique para ver detalhes do nó"
+                      @click="openPlanNodeModalById(op.nodeId)">
                     <td>{{ op.nodeId }}</td>
                     <td>{{ op.physicalOp }}</td>
                     <td class="small">{{ op.objectRef ? op.objectRef.table + (op.objectRef.index ? ' · ' + op.objectRef.index : '') : '—' }}</td>
@@ -363,7 +371,10 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(row, i) in selectedStatement.tableIo" :key="i">
+                  <tr v-for="(row, i) in selectedStatement.tableIo" :key="i"
+                      :class="{ 'plan-row-clickable': row.primaryNodeId }"
+                      :title="row.primaryNodeId ? 'Clique para ver detalhes do nó com maior I/O' : null"
+                      @click="row.primaryNodeId && openPlanNodeModalById(row.primaryNodeId)">
                     <td>{{ row.table }}</td>
                     <td class="small">{{ row.index }}</td>
                     <td class="small">{{ row.ops }}</td>
@@ -415,14 +426,31 @@
             <div v-show="planTab === 'alerts'" class="plan-alerts-list">
               <ul v-if="selectedStatement.issues.length" class="list-group list-group-flush">
                 <li v-for="(issue, idx) in selectedStatement.issues" :key="idx"
-                    class="list-group-item small py-2">
+                    class="list-group-item small py-2"
+                    :class="{ 'plan-row-clickable': issue.nodeId }"
+                    :title="issue.nodeId ? 'Clique para ver detalhes do nó' : null"
+                    @click="issue.nodeId && openPlanNodeModalById(issue.nodeId)">
                   <i class="fal me-2" :class="issueIcon(issue.severity)"></i>
-                  {{ issue.message }}
+                  <span v-if="issue.nodeId" class="plan-issue-node me-1">[{{ issue.nodeId }}]</span>
+                  <span>{{ issue.message }}</span>
                 </li>
               </ul>
               <p v-else class="text-muted small mb-0 py-3 text-center">
                 <i class="fal fa-check-circle me-1"></i> Nenhum alerta para este statement.
               </p>
+            </div>
+
+            <div v-show="planTab === 'query'" class="plan-sql-tab-panel">
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <span class="small text-muted">
+                  {{ statementSqlLineCount }} linha(s) · {{ statementSqlCharCount }} caractere(s)
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                        @click="copyStatementSql" title="Copiar consulta">
+                  <i class="fal fa-copy me-1"></i>Copiar
+                </button>
+              </div>
+              <pre class="plan-sql-view plan-sql-view--full mb-0" v-html="highlightedSql"></pre>
             </div>
           </div>
         </section>

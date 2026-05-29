@@ -59,10 +59,33 @@
   line-height: 1.45;
   padding: 1rem;
   border-radius: 0.375rem;
-  max-height: 220px;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  word-break: normal;
+  margin: 0;
+}
+
+.plan-sql-tab-panel {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.65rem;
+  background: var(--bg-card-header);
+}
+
+.plan-sql-view--full {
+  max-height: min(70vh, 720px);
+  min-height: 12rem;
+  border: 1px solid var(--border);
+}
+
+.plan-sql-view--full code.hljs {
+  display: block;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+  word-break: normal;
 }
 
 .plan-sql-view .sql-kw {
@@ -726,6 +749,28 @@
 
 .plan-tree-item.plan-tree-hot {
   background: rgba(220, 53, 69, 0.08);
+}
+
+.plan-row-clickable {
+  cursor: pointer;
+}
+
+.plan-tree-item.plan-row-clickable:hover {
+  background: rgba(13, 110, 253, 0.1);
+}
+
+.plan-data-table tbody tr.plan-row-clickable:hover > * {
+  background: rgba(13, 110, 253, 0.1) !important;
+}
+
+.plan-alerts-list .list-group-item.plan-row-clickable:hover {
+  background: rgba(13, 110, 253, 0.1) !important;
+}
+
+.plan-issue-node {
+  font-family: Consolas, "Courier New", monospace;
+  font-weight: 700;
+  color: #79c0ff;
 }
 
 .plan-tree-id {
